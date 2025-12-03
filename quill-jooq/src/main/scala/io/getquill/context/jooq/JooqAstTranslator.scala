@@ -1,0 +1,401 @@
+package io.getquill.context.jooq
+
+import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering}
+import io.getquill.NamingStrategy
+import org.jooq.{DSLContext, Record, Field, Condition, Table, SelectSelectStep, SelectJoinStep, SelectConditionStep, ResultQuery, InsertSetStep, InsertSetMoreStep, UpdateSetFirstStep, UpdateSetMoreStep, UpdateConditionStep, DeleteConditionStep, SortField, SelectFieldOrAsterisk}
+import org.jooq.impl.DSL
+import scala.collection.mutable
+
+/**
+ * Translates Quill AST nodes to jOOQ DSL objects.
+ * This is the core component that bridges Quill's compile-time DSL with jOOQ's runtime SQL building.
+ */
+object JooqAstTranslator {
+
+  case class TranslationContext(
+    naming: NamingStrategy,
+    bindings: mutable.ListBuffer[(String, Any)] = mutable.ListBuffer.empty,
+    aliases: mutable.Map[String, Table[?]] = mutable.Map.empty
+  ) {
+    def addBinding(uid: String, value: Any): Unit = {
+      bindings += ((uid, value))
+    }
+
+    def registerAlias(name: String, table: Table[?]): Unit = {
+      aliases(name) = table
+    }
+
+    def lookupAlias(name: String): Option[Table[?]] = {
+      aliases.get(name)
+    }
+
+    def applyNaming(name: String): String = {
+      naming.table(name)
+    }
+
+    def applyColumnNaming(name: String): String = {
+      naming.column(name)
+    }
+  }
+
+  /**
+   * Translate a Query AST to a jOOQ SelectQuery
+   */
+  def translateQuery(ast: Ast, ctx: TranslationContext, dslCtx: DSLContext): ResultQuery[Record] = {
+    ast match {
+      case Map(query, alias, body) =>
+        val fields = translateProjection(body, alias.name, ctx)
+        translateQueryWithProjection(query, fields, ctx, dslCtx)
+
+      case Filter(query, alias, predicate) =>
+        query match {
+          case entity: Entity =>
+            val table = translateEntity(entity, ctx)
+            val condition = translateCondition(predicate, alias.name, ctx)
+            dslCtx.selectFrom(table).where(condition)
+          case _ =>
+            throw new UnsupportedOperationException("Nested filter queries not yet supported")
+        }
+
+      case entity: Entity =>
+        val table = translateEntity(entity, ctx)
+        dslCtx.selectFrom(table)
+
+      case SortBy(query, alias, sortBy, ordering) =>
+        query match {
+          case entity: Entity =>
+            val table = translateEntity(entity, ctx)
+            val orderFields = translateOrdering(sortBy, ordering, alias.name, ctx)
+            dslCtx.selectFrom(table).orderBy(orderFields*)
+          case Filter(innerEntity: Entity, filterAlias, predicate) =>
+            val table = translateEntity(innerEntity, ctx)
+            val condition = translateCondition(predicate, filterAlias.name, ctx)
+            val orderFields = translateOrdering(sortBy, ordering, alias.name, ctx)
+            dslCtx.selectFrom(table).where(condition).orderBy(orderFields*)
+          case _ =>
+            throw new UnsupportedOperationException("Complex sorted queries not yet supported")
+        }
+
+      case Take(query, n) =>
+        query match {
+          case entity: Entity =>
+            val table = translateEntity(entity, ctx)
+            val limit = translateConstantInt(n)
+            dslCtx.selectFrom(table).limit(limit)
+          case _ =>
+            throw new UnsupportedOperationException("Complex limited queries not yet supported")
+        }
+
+      case Drop(query, n) =>
+        query match {
+          case entity: Entity =>
+            val table = translateEntity(entity, ctx)
+            val offset = translateConstantInt(n)
+            dslCtx.selectFrom(table).offset(offset)
+          case _ =>
+            throw new UnsupportedOperationException("Complex offset queries not yet supported")
+        }
+
+      case Distinct(query) =>
+        query match {
+          case entity: Entity =>
+            val table = translateEntity(entity, ctx)
+            dslCtx.selectDistinct().from(table)
+          case _ =>
+            throw new UnsupportedOperationException("Complex distinct queries not yet supported")
+        }
+
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported query AST node: ${ast.getClass.getSimpleName}")
+    }
+  }
+
+  private def translateQueryWithProjection(
+    query: Ast,
+    fields: Seq[SelectFieldOrAsterisk],
+    ctx: TranslationContext,
+    dslCtx: DSLContext
+  ): ResultQuery[Record] = {
+    query match {
+      case entity: Entity =>
+        val table = translateEntity(entity, ctx)
+        dslCtx.select(fields*).from(table)
+
+      case Filter(innerQuery, alias, predicate) =>
+        val table = innerQuery match {
+          case e: Entity => translateEntity(e, ctx)
+          case _ => throw new UnsupportedOperationException("Complex nested queries not yet supported")
+        }
+        val condition = translateCondition(predicate, alias.name, ctx)
+        dslCtx.select(fields*).from(table).where(condition)
+
+      case _ =>
+        throw new UnsupportedOperationException(s"Complex query projections not yet supported: ${query.getClass.getSimpleName}")
+    }
+  }
+
+  /**
+   * Translate entity (table) reference
+   */
+  def translateEntity(entity: Entity, ctx: TranslationContext): Table[Record] = {
+    val tableName = ctx.applyNaming(entity.name)
+    DSL.table(DSL.name(tableName)).asInstanceOf[Table[Record]]
+  }
+
+  /**
+   * Translate projection (SELECT fields)
+   */
+  def translateProjection(body: Ast, alias: String, ctx: TranslationContext): Seq[SelectFieldOrAsterisk] = {
+    body match {
+      case Ident(name, _) if name == alias =>
+        Seq(DSL.asterisk())
+
+      case Property(Ident(identName, _), propName) =>
+        val colName = ctx.applyColumnNaming(propName)
+        Seq(DSL.field(DSL.name(colName)))
+
+      case Tuple(values) =>
+        values.flatMap(v => translateProjection(v, alias, ctx))
+
+      case CaseClass(_, fields) =>
+        fields.flatMap { case (name, ast) =>
+          translateProjection(ast, alias, ctx)
+        }
+
+      case _ =>
+        Seq(translateField(body, alias, ctx))
+    }
+  }
+
+  /**
+   * Translate a field expression
+   */
+  def translateField(ast: Ast, alias: String, ctx: TranslationContext): Field[?] = {
+    ast match {
+      case Property(Ident(identName, _), propName) =>
+        val colName = ctx.applyColumnNaming(propName)
+        DSL.field(DSL.name(colName))
+
+      case Constant(v, _) =>
+        DSL.inline(v)
+
+      case Ident(name, _) =>
+        DSL.field(DSL.name(name))
+
+      case ScalarTag(uid, _) =>
+        DSL.param(uid, classOf[Object]).asInstanceOf[Field[?]]
+
+      case BinaryOperation(a, op, b) =>
+        translateBinaryField(a, op, b, alias, ctx)
+
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported field AST: ${ast.getClass.getSimpleName}")
+    }
+  }
+
+  /**
+   * Translate binary operation as field (for arithmetic operations)
+   */
+  def translateBinaryField(a: Ast, op: io.getquill.ast.BinaryOperator, b: Ast, alias: String, ctx: TranslationContext): Field[?] = {
+    val left = translateField(a, alias, ctx)
+    val right = translateField(b, alias, ctx)
+
+    op match {
+      case NumericOperator.`+` => left.asInstanceOf[Field[Number]].add(right.asInstanceOf[Field[Number]])
+      case NumericOperator.`-` => left.asInstanceOf[Field[Number]].sub(right.asInstanceOf[Field[Number]])
+      case NumericOperator.`*` => left.asInstanceOf[Field[Number]].mul(right.asInstanceOf[Field[Number]])
+      case NumericOperator.`/` => left.asInstanceOf[Field[Number]].div(right.asInstanceOf[Field[Number]])
+      case NumericOperator.`%` => left.asInstanceOf[Field[Number]].mod(right.asInstanceOf[Field[Number]])
+      case StringOperator.`+` => DSL.concat(left.asInstanceOf[Field[String]], right.asInstanceOf[Field[String]])
+      case _ => throw new UnsupportedOperationException(s"Unsupported binary field operator: $op")
+    }
+  }
+
+  /**
+   * Translate condition (WHERE clause)
+   */
+  def translateCondition(ast: Ast, alias: String, ctx: TranslationContext): Condition = {
+    ast match {
+      case BinaryOperation(a, op, b) =>
+        translateBinaryCondition(a, op, b, alias, ctx)
+
+      case UnaryOperation(op, operand) if op.toString == "!" =>
+        DSL.not(translateCondition(operand, alias, ctx))
+
+      case Constant(true, _) =>
+        DSL.trueCondition()
+
+      case Constant(false, _) =>
+        DSL.falseCondition()
+
+      case OptionIsDefined(inner) =>
+        translateField(inner, alias, ctx).isNotNull
+
+      case OptionIsEmpty(inner) =>
+        translateField(inner, alias, ctx).isNull
+
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported condition AST: ${ast.getClass.getSimpleName}")
+    }
+  }
+
+  /**
+   * Translate binary operation as condition
+   */
+  def translateBinaryCondition(a: Ast, op: io.getquill.ast.BinaryOperator, b: Ast, alias: String, ctx: TranslationContext): Condition = {
+    op match {
+      case BooleanOperator.`&&` =>
+        translateCondition(a, alias, ctx).and(translateCondition(b, alias, ctx))
+
+      case BooleanOperator.`||` =>
+        translateCondition(a, alias, ctx).or(translateCondition(b, alias, ctx))
+
+      case _ =>
+        val left = translateField(a, alias, ctx).asInstanceOf[Field[Object]]
+        val right = translateField(b, alias, ctx).asInstanceOf[Field[Object]]
+
+        op match {
+          case EqualityOperator.`_==` => left.equal(right)
+          case EqualityOperator.`_!=` => left.notEqual(right)
+          case NumericOperator.`>` => left.asInstanceOf[Field[Comparable[Object]]].gt(right.asInstanceOf[Field[Comparable[Object]]])
+          case NumericOperator.`>=` => left.asInstanceOf[Field[Comparable[Object]]].ge(right.asInstanceOf[Field[Comparable[Object]]])
+          case NumericOperator.`<` => left.asInstanceOf[Field[Comparable[Object]]].lt(right.asInstanceOf[Field[Comparable[Object]]])
+          case NumericOperator.`<=` => left.asInstanceOf[Field[Comparable[Object]]].le(right.asInstanceOf[Field[Comparable[Object]]])
+          case SetOperator.`contains` => left.in(right)
+          case _ =>
+            throw new UnsupportedOperationException(s"Unsupported binary condition operator: $op")
+        }
+    }
+  }
+
+  /**
+   * Translate ordering (ORDER BY)
+   */
+  def translateOrdering(sortBy: Ast, ordering: Ast, alias: String, ctx: TranslationContext): Seq[SortField[?]] = {
+    val fields = sortBy match {
+      case Tuple(values) => values.map(v => translateField(v, alias, ctx))
+      case _ => Seq(translateField(sortBy, alias, ctx))
+    }
+
+    val orderings = ordering match {
+      case TupleOrdering(values) => values
+      case o => Seq(o)
+    }
+
+    fields.zip(orderings).map { case (field, ord) =>
+      ord match {
+        case Asc | AscNullsFirst => field.asc()
+        case Desc | DescNullsFirst => field.desc()
+        case AscNullsLast => field.asc().nullsLast()
+        case DescNullsLast => field.desc().nullsLast()
+        case _ => field.asc()
+      }
+    }
+  }
+
+  /**
+   * Extract integer from Constant AST
+   */
+  def translateConstantInt(ast: Ast): Int = {
+    ast match {
+      case Constant(v: Int, _) => v
+      case Constant(v: Long, _) => v.toInt
+      case _ => throw new IllegalArgumentException(s"Expected integer constant, got: ${ast.getClass.getSimpleName}")
+    }
+  }
+
+  // ========== Action Translation ==========
+
+  /**
+   * Translate INSERT action
+   */
+  def translateInsert(ast: Insert, ctx: TranslationContext, dslCtx: DSLContext): InsertSetMoreStep[Record] = {
+    val entity = ast.query match {
+      case e: Entity => e
+      case _ => throw new UnsupportedOperationException("Insert must target an entity")
+    }
+    val table = translateEntity(entity, ctx)
+    var insertStep = dslCtx.insertInto(table).asInstanceOf[InsertSetStep[Record]]
+
+    ast.assignments.foreach { assignment =>
+      val propName = assignment.property match {
+        case Property(_, name) => name
+        case _ => throw new UnsupportedOperationException("Assignment must have a property")
+      }
+      val colName = ctx.applyColumnNaming(propName)
+      val field = DSL.field(DSL.name(colName))
+      val value = translateFieldValue(assignment.value, "", ctx)
+      insertStep = insertStep.set(field.asInstanceOf[Field[Any]], value).asInstanceOf[InsertSetStep[Record]]
+    }
+
+    insertStep.asInstanceOf[InsertSetMoreStep[Record]]
+  }
+
+  /**
+   * Translate UPDATE action
+   */
+  def translateUpdate(ast: Update, ctx: TranslationContext, dslCtx: DSLContext): UpdateConditionStep[Record] = {
+    val (entity, whereCondition) = ast.query match {
+      case Filter(e: Entity, alias, predicate) =>
+        (e, Some(translateCondition(predicate, alias.name, ctx)))
+      case e: Entity =>
+        (e, None)
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported update query")
+    }
+
+    val table = translateEntity(entity, ctx)
+    var updateStep = dslCtx.update(table).asInstanceOf[UpdateSetFirstStep[Record]]
+
+    ast.assignments.foreach { assignment =>
+      val propName = assignment.property match {
+        case Property(_, name) => name
+        case _ => throw new UnsupportedOperationException("Assignment must have a property")
+      }
+      val colName = ctx.applyColumnNaming(propName)
+      val field = DSL.field(DSL.name(colName))
+      val value = translateFieldValue(assignment.value, "", ctx)
+      updateStep = updateStep.set(field.asInstanceOf[Field[Any]], value).asInstanceOf[UpdateSetFirstStep[Record]]
+    }
+
+    whereCondition match {
+      case Some(cond) => updateStep.asInstanceOf[UpdateSetMoreStep[Record]].where(cond)
+      case None => updateStep.asInstanceOf[UpdateSetMoreStep[Record]].where(DSL.trueCondition())
+    }
+  }
+
+  /**
+   * Translate DELETE action
+   */
+  def translateDelete(ast: Delete, ctx: TranslationContext, dslCtx: DSLContext): DeleteConditionStep[Record] = {
+    val (entity, whereCondition) = ast.query match {
+      case Filter(e: Entity, alias, predicate) =>
+        (e, Some(translateCondition(predicate, alias.name, ctx)))
+      case e: Entity =>
+        (e, None)
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported delete query")
+    }
+
+    val table = translateEntity(entity, ctx)
+    val deleteStep = dslCtx.deleteFrom(table)
+
+    whereCondition match {
+      case Some(cond) => deleteStep.where(cond)
+      case None => deleteStep.where(DSL.trueCondition())
+    }
+  }
+
+  /**
+   * Translate field value for INSERT/UPDATE
+   */
+  def translateFieldValue(ast: Ast, alias: String, ctx: TranslationContext): Any = {
+    ast match {
+      case Constant(v, _) => v
+      case ScalarTag(uid, _) =>
+        DSL.param(uid, classOf[Object])
+      case NullValue => null
+      case _ => translateField(ast, alias, ctx)
+    }
+  }
+}

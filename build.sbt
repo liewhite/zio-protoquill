@@ -38,7 +38,7 @@ lazy val sqlTestModules = Seq[sbt.ClasspathDep[sbt.ProjectReference]](
 )
 
 lazy val dbModules = Seq[sbt.ClasspathDep[sbt.ProjectReference]](
-  `quill-jdbc`, `quill-doobie`, `quill-zio`, `quill-jdbc-zio`, `quill-caliban`
+  `quill-jdbc`, `quill-doobie`, `quill-zio`, `quill-jdbc-zio`, `quill-caliban`, `quill-jooq`
 )
 
 lazy val bigdataModules = Seq[sbt.ClasspathDep[sbt.ProjectReference]](
@@ -246,6 +246,26 @@ lazy val `quill-cassandra-zio` =
     )
     .dependsOn(`quill-cassandra` % "compile->compile;test->test")
     .dependsOn(`quill-zio` % "compile->compile;test->test")
+
+lazy val jooqVersion = "3.19.16"
+
+lazy val `quill-jooq` =
+  (project in file("quill-jooq"))
+    .settings(commonSettings: _*)
+    .settings(
+      Test / fork := true,
+      libraryDependencies ++= Seq(
+        "org.jooq" % "jooq" % jooqVersion,
+        "dev.zio" %% "zio" % zioVersion,
+        "com.zaxxer" % "HikariCP" % "6.3.2" exclude("org.slf4j", "*"),
+        "org.postgresql" % "postgresql" % "42.7.7" % Test,
+        "com.h2database" % "h2" % "2.3.232" % Test,
+        "ch.qos.logback" % "logback-classic" % "1.5.18" % Test,
+        "org.scalatest" %% "scalatest" % scalatestVersion % Test,
+        "org.scalatest" %% "scalatest-mustmatchers" % scalatestVersion % Test
+      )
+    )
+    .dependsOn(`quill-sql` % "compile->compile;test->test")
 
 // Include scalafmt formatter for pretty printing failed queries
 val includeFormatter =
