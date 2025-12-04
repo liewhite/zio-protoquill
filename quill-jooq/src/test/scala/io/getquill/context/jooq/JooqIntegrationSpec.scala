@@ -145,7 +145,7 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
 
     "SELECT - sortBy descending" in {
       val q = quote {
-        query[Person].sortBy(p => p.age)(Ord.desc)
+        query[Person].sortBy(p => p.age)(using Ord.desc)
       }
       val result = runZIO(ctx.run(q))
       result.map(_.name) mustBe List("Charlie", "Alice", "Bob")

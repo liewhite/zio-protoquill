@@ -211,7 +211,7 @@ class InsertAdvancedSpec extends Spec with Inside {
     }
 
     "auto-quote with lift" in {
-      val result = ctx.run(query[Person]updateValue(Person(lift("Joe"), 123)))
+      val result = ctx.run(query[Person].updateValue(Person(lift("Joe"), 123)))
       result.triple mustEqual (
         "UPDATE Person SET name = ?, age = 123",
         List("Joe"),

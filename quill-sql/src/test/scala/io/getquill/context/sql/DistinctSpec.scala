@@ -145,7 +145,7 @@ trait DistinctSpec extends Spec {
     query[Person]
       .join(query[Couple]).on(_.name == _.him)
       .distinct
-      .sortBy(_._1.name)(Ord.asc)
+      .sortBy(_._1.name)(using Ord.asc)
   }
   val `Ex 8 Distinct With Sort Result` =
     List(
@@ -157,7 +157,7 @@ trait DistinctSpec extends Spec {
     )
 
   inline def `Ex 9 DistinctOn With Sort` = quote {
-    query[Person].map(p => (p.name, p.age % 2)).distinctOn(_._2).sortBy(_._2)(Ord.desc)
+    query[Person].map(p => (p.name, p.age % 2)).distinctOn(_._2).sortBy(_._2)(using Ord.desc)
   }
   val `Ex 9 DistinctOn With Sort Result` =
     List(("A", 1), ("B", 0))
@@ -166,7 +166,7 @@ trait DistinctSpec extends Spec {
     query[Person]
       .join(query[Couple]).on(_.name == _.him)
       .distinctOn(_._1.name)
-      .sortBy(_._1.name)(Ord.asc)
+      .sortBy(_._1.name)(using Ord.asc)
       .map(t => (t._1, t._2.him))
   }
   val `Ex 10 DistinctOn With Applicative Join Result` =
@@ -181,7 +181,7 @@ trait DistinctSpec extends Spec {
       c <- query[Couple].join(c => c.him == p.name)
     } yield (p, c))
       .distinctOn(_._1.name)
-      .sortBy(_._1.name)(Ord.asc)
+      .sortBy(_._1.name)(using Ord.asc)
       .map(t => (t._1, t._2.him))
   }
   val `Ex 11 DistinctOn With Monadic Join Result` =

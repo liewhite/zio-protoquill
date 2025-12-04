@@ -12,7 +12,7 @@ trait QueryResultTypeSpec extends ProductSpec {
   inline def map = quote(query[Product].map(_.id))
   inline def filter = quote(query[Product].filter(_ => true))
   inline def withFilter = quote(query[Product].withFilter(_ => true))
-  inline def sortBy = quote(query[Product].sortBy(_.id)(Ord.asc))
+  inline def sortBy = quote(query[Product].sortBy(_.id)(using Ord.asc))
   inline def take = quote(query[Product].take(10))
   inline def drop = quote(query[Product].drop(1))
   inline def `++` = quote(query[Product] ++ query[Product])

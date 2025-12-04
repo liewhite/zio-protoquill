@@ -24,7 +24,7 @@ class QuerySortByTest extends Spec with Inside with TestEntities {
     }
     "asc" in {
       inline def q = quote {
-        qr1.sortBy(t => t.s)(Ord.asc)
+        qr1.sortBy(t => t.s)(using Ord.asc)
       }
       val s = SortBy(Entity("TestEntity", Nil, TestEntityQuat), Ident("t"), Property(Ident("t"), "s"), Asc)
       quote(unquote(q)).ast mustEqual s
@@ -32,7 +32,7 @@ class QuerySortByTest extends Spec with Inside with TestEntities {
     }
     "desc" in {
       inline def q = quote {
-        qr1.sortBy(t => t.s)(Ord.desc)
+        qr1.sortBy(t => t.s)(using Ord.desc)
       }
       val s = SortBy(Entity("TestEntity", Nil, TestEntityQuat), Ident("t"), Property(Ident("t"), "s"), Desc)
       quote(unquote(q)).ast mustEqual s
@@ -40,7 +40,7 @@ class QuerySortByTest extends Spec with Inside with TestEntities {
     }
     "ascNullsFirst" in {
       inline def q = quote {
-        qr1.sortBy(t => t.s)(Ord.ascNullsFirst)
+        qr1.sortBy(t => t.s)(using Ord.ascNullsFirst)
       }
       val s = SortBy(Entity("TestEntity", Nil, TestEntityQuat), Ident("t"), Property(Ident("t"), "s"), AscNullsFirst)
       quote(unquote(q)).ast mustEqual s
@@ -48,7 +48,7 @@ class QuerySortByTest extends Spec with Inside with TestEntities {
     }
     "descNullsFirst" in {
       inline def q = quote {
-        qr1.sortBy(t => t.s)(Ord.descNullsFirst)
+        qr1.sortBy(t => t.s)(using Ord.descNullsFirst)
       }
       val s = SortBy(Entity("TestEntity", Nil, TestEntityQuat), Ident("t"), Property(Ident("t"), "s"), DescNullsFirst)
       quote(unquote(q)).ast mustEqual s
@@ -56,7 +56,7 @@ class QuerySortByTest extends Spec with Inside with TestEntities {
     }
     "ascNullsLast" in {
       inline def q = quote {
-        qr1.sortBy(t => t.s)(Ord.ascNullsLast)
+        qr1.sortBy(t => t.s)(using Ord.ascNullsLast)
       }
       val s = SortBy(Entity("TestEntity", Nil, TestEntityQuat), Ident("t"), Property(Ident("t"), "s"), AscNullsLast)
       quote(unquote(q)).ast mustEqual s
@@ -64,7 +64,7 @@ class QuerySortByTest extends Spec with Inside with TestEntities {
     }
     "descNullsLast" in {
       inline def q = quote {
-        qr1.sortBy(t => t.s)(Ord.descNullsLast)
+        qr1.sortBy(t => t.s)(using Ord.descNullsLast)
       }
       val s = SortBy(Entity("TestEntity", Nil, TestEntityQuat), Ident("t"), Property(Ident("t"), "s"), DescNullsLast)
       quote(unquote(q)).ast mustEqual s
@@ -73,7 +73,7 @@ class QuerySortByTest extends Spec with Inside with TestEntities {
     "tuple" - {
       "simple" in {
         inline def q = quote {
-          qr1.sortBy(t => (t.s, t.i))(Ord.desc)
+          qr1.sortBy(t => (t.s, t.i))(using Ord.desc)
         }
         val s = SortBy(Entity("TestEntity", Nil, TestEntityQuat), Ident("t"), Tuple(List(Property(Ident("t"), "s"), Property(Ident("t"), "i"))), Desc)
         quote(unquote(q)).ast mustEqual s

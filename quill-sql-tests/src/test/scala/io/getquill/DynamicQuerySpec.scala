@@ -242,7 +242,7 @@ class DynamicQuerySpec extends Spec { // //
       val o = Ord.desc[Int]
       test(
         dynamicQuery[TestEntity].sortBy(v0 => quote(v0.i))(using o),
-        query[TestEntity].sortBy(v0 => v0.i)(Ord.desc)
+        query[TestEntity].sortBy(v0 => v0.i)(using Ord.desc)
       )
     }
 

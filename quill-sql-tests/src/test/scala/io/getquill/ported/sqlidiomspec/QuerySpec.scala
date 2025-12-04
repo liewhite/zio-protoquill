@@ -182,7 +182,7 @@ class QuerySpec extends Spec {
     "distinctOn" - {
       "simple" in {
         inline def q = quote {
-          qr1.distinctOn(e => e.s).sortBy(e => e.i)(Ord.asc).map(e => e.i)
+          qr1.distinctOn(e => e.s).sortBy(e => e.i)(using Ord.asc).map(e => e.i)
         }
 
         testContext.run(q).string mustEqual
@@ -191,7 +191,7 @@ class QuerySpec extends Spec {
 
       "tuple" in {
         inline def q = quote {
-          qr1.distinctOn(e => (e.s, e.i)).sortBy(e => e.i)(Ord.asc).map(e => e.i)
+          qr1.distinctOn(e => (e.s, e.i)).sortBy(e => e.i)(using Ord.asc).map(e => e.i)
         }
 
         testContext.run(q).string mustEqual
@@ -201,7 +201,7 @@ class QuerySpec extends Spec {
       "mapped" in {
         case class Person(id: Int, name: String, age: Int)
         inline def q = quote {
-          query[Person].map(e => (e.name, e.age % 2)).distinctOn(_._2).sortBy(_._2)(Ord.desc)
+          query[Person].map(e => (e.name, e.age % 2)).distinctOn(_._2).sortBy(_._2)(using Ord.desc)
         }
         testContext.run(q).string mustEqual
           "SELECT DISTINCT ON (e._2) e._1, e._2 FROM (SELECT e.name AS _1, e.age % 2 AS _2 FROM Person e) AS e ORDER BY e._2 DESC"
@@ -216,7 +216,7 @@ class QuerySpec extends Spec {
             p <- query[Person]
             a <- query[Address].join(a => a.fk == p.id)
           } yield (p, a))
-            .distinctOn(e => e._1.name).sortBy(e => e._1.name)(Ord.asc)
+            .distinctOn(e => e._1.name).sortBy(e => e._1.name)(using Ord.asc)
         }
         // TODO Back here
 
@@ -249,42 +249,42 @@ class QuerySpec extends Spec {
       }
       "asc" in {
         inline def q = quote {
-          qr1.sortBy(t => t.s)(Ord.asc)
+          qr1.sortBy(t => t.s)(using Ord.asc)
         }
         testContext.run(q).string mustEqual
           "SELECT t.s, t.i, t.l, t.o, t.b FROM TestEntity t ORDER BY t.s ASC"
       }
       "desc" in {
         inline def q = quote {
-          qr1.sortBy(t => t.s)(Ord.desc)
+          qr1.sortBy(t => t.s)(using Ord.desc)
         }
         testContext.run(q).string mustEqual
           "SELECT t.s, t.i, t.l, t.o, t.b FROM TestEntity t ORDER BY t.s DESC"
       }
       "ascNullsFirst" in {
         inline def q = quote {
-          qr1.sortBy(t => t.s)(Ord.ascNullsFirst)
+          qr1.sortBy(t => t.s)(using Ord.ascNullsFirst)
         }
         testContext.run(q).string mustEqual
           "SELECT t.s, t.i, t.l, t.o, t.b FROM TestEntity t ORDER BY t.s ASC NULLS FIRST"
       }
       "descNullsFirst" in {
         inline def q = quote {
-          qr1.sortBy(t => t.s)(Ord.descNullsFirst)
+          qr1.sortBy(t => t.s)(using Ord.descNullsFirst)
         }
         testContext.run(q).string mustEqual
           "SELECT t.s, t.i, t.l, t.o, t.b FROM TestEntity t ORDER BY t.s DESC NULLS FIRST"
       }
       "ascNullsLast" in {
         inline def q = quote {
-          qr1.sortBy(t => t.s)(Ord.ascNullsLast)
+          qr1.sortBy(t => t.s)(using Ord.ascNullsLast)
         }
         testContext.run(q).string mustEqual
           "SELECT t.s, t.i, t.l, t.o, t.b FROM TestEntity t ORDER BY t.s ASC NULLS LAST"
       }
       "descNullsLast" in {
         inline def q = quote {
-          qr1.sortBy(t => t.s)(Ord.descNullsLast)
+          qr1.sortBy(t => t.s)(using Ord.descNullsLast)
         }
         testContext.run(q).string mustEqual
           "SELECT t.s, t.i, t.l, t.o, t.b FROM TestEntity t ORDER BY t.s DESC NULLS LAST"
