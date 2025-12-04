@@ -183,7 +183,11 @@ object JooqAstTranslator {
         DSL.field(DSL.name(name))
 
       case ScalarTag(uid, _) =>
-        DSL.param(uid, classOf[Object]).asInstanceOf[Field[?]]
+        // Look up the binding value and inline it
+        ctx.bindings.find(_._1 == uid) match {
+          case Some((_, value)) => DSL.inline(value)
+          case None => DSL.param(uid, classOf[Object]).asInstanceOf[Field[?]]
+        }
 
       case BinaryOperation(a, op, b) =>
         translateBinaryField(a, op, b, alias, ctx)
@@ -393,7 +397,11 @@ object JooqAstTranslator {
     ast match {
       case Constant(v, _) => v
       case ScalarTag(uid, _) =>
-        DSL.param(uid, classOf[Object])
+        // Look up the binding value directly for INSERT/UPDATE
+        ctx.bindings.find(_._1 == uid) match {
+          case Some((_, value)) => value
+          case None => DSL.param(uid, classOf[Object])
+        }
       case NullValue => null
       case _ => translateField(ast, alias, ctx)
     }

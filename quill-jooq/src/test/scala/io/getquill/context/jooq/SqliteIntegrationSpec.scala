@@ -384,6 +384,88 @@ class SqliteIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfte
       }
     }
 
+    "should translate and execute query with lifted parameter (ScalarTag)" in {
+      val conn = dataSource.getConnection()
+      try {
+        val dslCtx = DSL.using(conn, SQLDialect.SQLITE)
+        val translationCtx = JooqAstTranslator.TranslationContext(Literal)
+
+        // Simulate lift: the runtime value is 25, stored in bindings
+        val liftedValue = 25
+        val liftUid = "lifted_age_uid"
+        translationCtx.addBinding(liftUid, liftedValue)
+
+        // Create Filter AST: query[Person].filter(p => p.age > lift(minAge))
+        // Where lift(minAge) becomes ScalarTag("lifted_age_uid", External.Source.Parser)
+        val personQuat = io.getquill.quat.Quat.Product("Person",
+          "id" -> io.getquill.quat.Quat.Value,
+          "name" -> io.getquill.quat.Quat.Value,
+          "age" -> io.getquill.quat.Quat.Value
+        )
+        val entity = io.getquill.ast.Entity("Person", Nil, personQuat)
+        val alias = io.getquill.ast.Ident("p", personQuat)
+        val ageProperty = io.getquill.ast.Property(alias, "age")
+        val scalarTag = io.getquill.ast.ScalarTag(liftUid, io.getquill.ast.External.Source.Parser)
+        val predicate = io.getquill.ast.BinaryOperation(
+          ageProperty,
+          io.getquill.ast.NumericOperator.`>`,
+          scalarTag
+        )
+        val filter = io.getquill.ast.Filter(entity, alias, predicate)
+
+        val query = JooqAstTranslator.translateQuery(filter, translationCtx, dslCtx)
+        val result = query.fetch()
+
+        // Should return all persons with age > 25
+        // Note: Previous tests may have modified the database
+        // (Bob updated to 26, David inserted with 40)
+        result.size() must be >= 2  // At minimum Alice (30), Charlie (35)
+      } finally {
+        conn.close()
+      }
+    }
+
+    "should translate and execute INSERT with lifted parameters" in {
+      val conn = dataSource.getConnection()
+      try {
+        val dslCtx = DSL.using(conn, SQLDialect.SQLITE)
+        val translationCtx = JooqAstTranslator.TranslationContext(Literal)
+
+        // Simulate lifted values for INSERT
+        translationCtx.addBinding("lift_id", 200)
+        translationCtx.addBinding("lift_name", "Eve")
+        translationCtx.addBinding("lift_age", 28)
+
+        val personQuat = io.getquill.quat.Quat.Product("Person",
+          "id" -> io.getquill.quat.Quat.Value,
+          "name" -> io.getquill.quat.Quat.Value,
+          "age" -> io.getquill.quat.Quat.Value
+        )
+        val entity = io.getquill.ast.Entity("Person", Nil, personQuat)
+        val alias = io.getquill.ast.Ident("p", personQuat)
+
+        val assignments = List(
+          io.getquill.ast.Assignment(alias, io.getquill.ast.Property(alias, "id"), io.getquill.ast.ScalarTag("lift_id", io.getquill.ast.External.Source.Parser)),
+          io.getquill.ast.Assignment(alias, io.getquill.ast.Property(alias, "name"), io.getquill.ast.ScalarTag("lift_name", io.getquill.ast.External.Source.Parser)),
+          io.getquill.ast.Assignment(alias, io.getquill.ast.Property(alias, "age"), io.getquill.ast.ScalarTag("lift_age", io.getquill.ast.External.Source.Parser))
+        )
+        val insert = io.getquill.ast.Insert(entity, assignments)
+
+        val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
+        val rowsAffected = query.execute()
+
+        rowsAffected mustBe 1
+
+        // Verify insertion
+        val verifyResult = dslCtx.selectFrom(DSL.table("Person")).where(DSL.field("id").equal(200)).fetch()
+        verifyResult.size() mustBe 1
+        verifyResult.get(0).get("name") mustBe "Eve"
+        verifyResult.get(0).get("age").asInstanceOf[Int] mustBe 28
+      } finally {
+        conn.close()
+      }
+    }
+
   }
 
 }

@@ -39,7 +39,8 @@ class ZioJooqContextSpec extends AnyFreeSpec with Matchers {
       q.ast mustBe a[io.getquill.ast.Map]
     }
 
-    // lift functionality will be tested after full implementation
+    // TODO: lift functionality requires encoder implementation
+    // Uncomment after implementing JooqEncoder for basic types
     // "should compile query with lift" in {
     //   val minAge = 25
     //   val q = quote {
@@ -90,6 +91,31 @@ class ZioJooqContextSpec extends AnyFreeSpec with Matchers {
 
       val table = JooqAstTranslator.translateEntity(entity, translationCtx)
       table.getName mustBe "person_details"
+    }
+
+    "should resolve ScalarTag from bindings" in {
+      import io.getquill.ast.{ScalarTag, External}
+
+      val translationCtx = JooqAstTranslator.TranslationContext(Literal)
+      translationCtx.addBinding("uid_123", 42)
+
+      val scalarTag = ScalarTag("uid_123", External.Source.Parser)
+      val field = JooqAstTranslator.translateField(scalarTag, "", translationCtx)
+
+      // The field should be an inline value of 42
+      field.toString must include("42")
+    }
+
+    "should resolve ScalarTag in field value for INSERT/UPDATE" in {
+      import io.getquill.ast.{ScalarTag, External}
+
+      val translationCtx = JooqAstTranslator.TranslationContext(Literal)
+      translationCtx.addBinding("uid_456", "test_value")
+
+      val scalarTag = ScalarTag("uid_456", External.Source.Parser)
+      val value = JooqAstTranslator.translateFieldValue(scalarTag, "", translationCtx)
+
+      value mustBe "test_value"
     }
 
   }
