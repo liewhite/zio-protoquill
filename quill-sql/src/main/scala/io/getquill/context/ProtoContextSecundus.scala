@@ -71,13 +71,3 @@ object ExecutionType {
   case object Unknown extends ExecutionType
 }
 
-trait ProtoStreamContext[+Dialect <: io.getquill.idiom.Idiom, +Naming <: NamingStrategy] extends RowContext {
-  type PrepareRow
-  type ResultRow
-
-  type Runner
-  type StreamResult[T]
-  type Session
-
-  def streamQuery[T](fetchSize: Option[Int], sql: String, prepare: Prepare, extractor: Extractor[T])(info: ExecutionInfo, rn: Runner): StreamResult[T]
-}

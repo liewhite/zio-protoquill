@@ -5,7 +5,6 @@ import io.getquill.ast.{Ident => AIdent, Query => AQuery, _}
 import scala.quoted._
 import scala.annotation.StaticAnnotation
 import scala.deriving._
-import io.getquill.Embedable
 
 import scala.reflect.ClassTag
 import io.getquill.norm.capture.AvoidAliasConflict

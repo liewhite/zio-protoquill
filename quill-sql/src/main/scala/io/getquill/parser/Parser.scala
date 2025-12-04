@@ -8,7 +8,6 @@ import io.getquill.metaprog.QuotedExpr
 import scala.quoted.*
 import scala.annotation.StaticAnnotation
 import scala.deriving.*
-import io.getquill.Embedable
 
 import scala.reflect.ClassTag
 import io.getquill.norm.capture.AvoidAliasConflict
