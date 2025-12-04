@@ -1,6 +1,6 @@
 package io.getquill.context.jooq
 
-import io.getquill.{Quoted, Query as QuillQuery, Action, ActionReturning, BatchAction, QAC, NamingStrategy, Literal, SnakeCase, Planter, EagerPlanter}
+import io.getquill.{Quoted, Query as QuillQuery, Action, ActionReturning, BatchAction, QAC, NamingStrategy, Literal, SnakeCase, Planter, EagerPlanter, EagerListPlanter}
 import io.getquill.context.{LiftMacro, LiftQueryMacro}
 import io.getquill.generic.GenericEncoder
 import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map as AstMap, SortBy, Take, Drop, Distinct, Join as AstJoin, FlatMap, Returning, ReturningGenerated, Property, Ident as AstIdent, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, PrefixUnaryOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering as AstOrdering}
@@ -129,6 +129,8 @@ class ZioJooqContext[+N <: NamingStrategy](
           lifts.foreach {
             case p: EagerPlanter[?, ?, ?] =>
               translationCtx.addBinding(p.uid, p.value)
+            case p: EagerListPlanter[?, ?, ?] =>
+              translationCtx.addListBinding(p.uid, p.values)
             case _ => // Other planters handled differently
           }
 
@@ -177,6 +179,8 @@ class ZioJooqContext[+N <: NamingStrategy](
           lifts.foreach {
             case p: EagerPlanter[?, ?, ?] =>
               translationCtx.addBinding(p.uid, p.value)
+            case p: EagerListPlanter[?, ?, ?] =>
+              translationCtx.addListBinding(p.uid, p.values)
             case _ =>
           }
 
@@ -220,6 +224,8 @@ class ZioJooqContext[+N <: NamingStrategy](
           lifts.foreach {
             case p: EagerPlanter[?, ?, ?] =>
               translationCtx.addBinding(p.uid, p.value)
+            case p: EagerListPlanter[?, ?, ?] =>
+              translationCtx.addListBinding(p.uid, p.values)
             case _ =>
           }
 
@@ -307,6 +313,8 @@ class ZioJooqContext[+N <: NamingStrategy](
             lifts.foreach {
               case p: EagerPlanter[?, ?, ?] =>
                 translationCtx.addBinding(p.uid, p.value)
+              case p: EagerListPlanter[?, ?, ?] =>
+                translationCtx.addListBinding(p.uid, p.values)
               case _ =>
             }
 

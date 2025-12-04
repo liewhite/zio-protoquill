@@ -1,6 +1,6 @@
 package io.getquill.context.jooq
 
-import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, ReturningGenerated, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering, Aggregation, AggregationOperator, GroupByMap}
+import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, ReturningGenerated, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering, Aggregation, AggregationOperator, GroupByMap, SetContains, ListContains}
 import io.getquill.NamingStrategy
 import org.jooq.{DSLContext, Record, Field, Condition, Table, SelectSelectStep, SelectJoinStep, SelectConditionStep, ResultQuery, InsertSetStep, InsertSetMoreStep, UpdateSetFirstStep, UpdateSetMoreStep, UpdateConditionStep, DeleteConditionStep, SortField, SelectFieldOrAsterisk, GroupField, AggregateFunction}
 import org.jooq.impl.DSL
@@ -15,10 +15,15 @@ object JooqAstTranslator {
   case class TranslationContext(
     naming: NamingStrategy,
     bindings: mutable.ListBuffer[(String, Any)] = mutable.ListBuffer.empty,
+    listBindings: mutable.Map[String, List[Any]] = mutable.Map.empty,
     aliases: mutable.Map[String, Table[?]] = mutable.Map.empty
   ) {
     def addBinding(uid: String, value: Any): Unit = {
       bindings += ((uid, value))
+    }
+
+    def addListBinding(uid: String, values: List[Any]): Unit = {
+      listBindings(uid) = values
     }
 
     def registerAlias(name: String, table: Table[?]): Unit = {
@@ -282,8 +287,40 @@ object JooqAstTranslator {
       case OptionIsEmpty(inner) =>
         translateField(inner, alias, ctx).isNull
 
+      case SetContains(set, element) =>
+        translateInCondition(set, element, alias, ctx)
+
+      case ListContains(list, element) =>
+        translateInCondition(list, element, alias, ctx)
+
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported condition AST: ${ast.getClass.getSimpleName}")
+    }
+  }
+
+  /**
+   * Translate IN condition (for SetContains/ListContains)
+   * liftQuery(Set(1,2,3)).contains(p.id) => p.id IN (1, 2, 3)
+   */
+  def translateInCondition(collection: Ast, element: Ast, alias: String, ctx: TranslationContext): Condition = {
+    val field = translateField(element, alias, ctx)
+
+    collection match {
+      case ScalarTag(uid, _) =>
+        // Look up the list values from list bindings
+        ctx.listBindings.get(uid) match {
+          case Some(values) if values.isEmpty =>
+            // Empty set - always false
+            DSL.falseCondition()
+          case Some(values) =>
+            // Non-empty set - create IN condition
+            field.in(values.map(DSL.inline(_))*)
+          case None =>
+            throw new IllegalStateException(s"No list binding found for uid: $uid")
+        }
+
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported collection type for IN: ${collection.getClass.getSimpleName}")
     }
   }
 
@@ -298,6 +335,33 @@ object JooqAstTranslator {
       case BooleanOperator.`||` =>
         translateCondition(a, alias, ctx).or(translateCondition(b, alias, ctx))
 
+      case SetOperator.`contains` =>
+        // a.contains(b) => b IN a
+        // For liftQuery(Set(1,2)).contains(p.id): a=ScalarTag (collection), b=Property (element)
+        (a, b) match {
+          case (ScalarTag(uid, _), element) =>
+            // Collection is on the left (a), element on the right (b)
+            val field = translateField(element, alias, ctx)
+            ctx.listBindings.get(uid) match {
+              case Some(values) if values.isEmpty => DSL.falseCondition()
+              case Some(values) => field.in(values.map(DSL.inline(_))*)
+              case None => throw new IllegalStateException(s"No list binding for uid: $uid")
+            }
+          case (element, ScalarTag(uid, _)) =>
+            // Element is on the left (a), collection on the right (b)
+            val field = translateField(element, alias, ctx)
+            ctx.listBindings.get(uid) match {
+              case Some(values) if values.isEmpty => DSL.falseCondition()
+              case Some(values) => field.in(values.map(DSL.inline(_))*)
+              case None => throw new IllegalStateException(s"No list binding for uid: $uid")
+            }
+          case _ =>
+            // Fallback - try standard field.in(field)
+            val left = translateField(a, alias, ctx).asInstanceOf[Field[Object]]
+            val right = translateField(b, alias, ctx).asInstanceOf[Field[Object]]
+            left.in(right)
+        }
+
       case _ =>
         val left = translateField(a, alias, ctx).asInstanceOf[Field[Object]]
         val right = translateField(b, alias, ctx).asInstanceOf[Field[Object]]
@@ -309,7 +373,6 @@ object JooqAstTranslator {
           case NumericOperator.`>=` => left.asInstanceOf[Field[Comparable[Object]]].ge(right.asInstanceOf[Field[Comparable[Object]]])
           case NumericOperator.`<` => left.asInstanceOf[Field[Comparable[Object]]].lt(right.asInstanceOf[Field[Comparable[Object]]])
           case NumericOperator.`<=` => left.asInstanceOf[Field[Comparable[Object]]].le(right.asInstanceOf[Field[Comparable[Object]]])
-          case SetOperator.`contains` => left.in(right)
           case _ =>
             throw new UnsupportedOperationException(s"Unsupported binary condition operator: $op")
         }

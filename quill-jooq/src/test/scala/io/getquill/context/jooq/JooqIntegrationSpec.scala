@@ -357,6 +357,48 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
       returnedAge mustBe 51
     }
 
+    // ========== IN Query Tests ==========
+
+    "SELECT - filter with IN (liftQuery Set)" in {
+      val ids = Set(1, 2)
+      val q = quote {
+        query[Person].filter(p => liftQuery(ids).contains(p.id))
+      }
+      val result = runZIO(ctx.run(q))
+      result.size mustBe 2
+      result.map(_.name) must contain allOf ("Alice", "Bob")
+    }
+
+    "SELECT - filter with IN (liftQuery List)" in {
+      val names = List("Alice", "Charlie")
+      val q = quote {
+        query[Person].filter(p => liftQuery(names).contains(p.name))
+      }
+      val result = runZIO(ctx.run(q))
+      result.size mustBe 2
+      result.map(_.name) must contain allOf ("Alice", "Charlie")
+    }
+
+    "SELECT - filter with IN combined with other conditions" in {
+      val ids = Set(1, 2, 3)
+      val q = quote {
+        query[Person].filter(p => liftQuery(ids).contains(p.id) && p.age > 25)
+      }
+      val result = runZIO(ctx.run(q))
+      // id in (1,2,3) AND age > 25 => Alice (30), Charlie (35)
+      result.size mustBe 2
+      result.map(_.name) must contain allOf ("Alice", "Charlie")
+    }
+
+    "SELECT - filter with empty IN (should return no results)" in {
+      val emptyIds = Set.empty[Int]
+      val q = quote {
+        query[Person].filter(p => liftQuery(emptyIds).contains(p.id))
+      }
+      val result = runZIO(ctx.run(q))
+      result.size mustBe 0
+    }
+
   }
 
 }
