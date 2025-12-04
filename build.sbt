@@ -260,6 +260,7 @@ lazy val `quill-jooq` =
         "com.zaxxer" % "HikariCP" % "6.3.2" exclude("org.slf4j", "*"),
         "org.postgresql" % "postgresql" % "42.7.7" % Test,
         "com.h2database" % "h2" % "2.3.232" % Test,
+        "org.xerial" % "sqlite-jdbc" % "3.50.3.0" % Test,
         "ch.qos.logback" % "logback-classic" % "1.5.18" % Test,
         "org.scalatest" %% "scalatest" % scalatestVersion % Test,
         "org.scalatest" %% "scalatest-mustmatchers" % scalatestVersion % Test
