@@ -18,8 +18,14 @@ object JooqAstTranslator {
     listBindings: mutable.Map[String, List[Any]] = mutable.Map.empty,
     aliases: mutable.Map[String, Table[?]] = mutable.Map.empty
   ) {
+    /** Add a binding, unwrapping Option values for jOOQ compatibility */
     def addBinding(uid: String, value: Any): Unit = {
-      bindings += ((uid, value))
+      val unwrapped = value match {
+        case Some(v) => v
+        case None    => null
+        case other   => other
+      }
+      bindings += ((uid, unwrapped))
     }
 
     def addListBinding(uid: String, values: List[Any]): Unit = {

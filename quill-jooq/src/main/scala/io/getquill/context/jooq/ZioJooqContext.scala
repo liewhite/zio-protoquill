@@ -313,15 +313,46 @@ trait JooqDecoder[T] {
 }
 
 object JooqDecoder {
+  // Basic numeric types
   given intDecoder: JooqDecoder[Int] = (record, index) => record.get(index, classOf[java.lang.Integer]).intValue()
   given longDecoder: JooqDecoder[Long] = (record, index) => record.get(index, classOf[java.lang.Long]).longValue()
-  given stringDecoder: JooqDecoder[String] = (record, index) => record.get(index, classOf[String])
+  given shortDecoder: JooqDecoder[Short] = (record, index) => record.get(index, classOf[java.lang.Short]).shortValue()
+  given byteDecoder: JooqDecoder[Byte] = (record, index) => record.get(index, classOf[java.lang.Byte]).byteValue()
+  given floatDecoder: JooqDecoder[Float] = (record, index) => record.get(index, classOf[java.lang.Float]).floatValue()
   given doubleDecoder: JooqDecoder[Double] = (record, index) => record.get(index, classOf[java.lang.Double]).doubleValue()
+
+  // Other basic types
   given booleanDecoder: JooqDecoder[Boolean] = (record, index) => record.get(index, classOf[java.lang.Boolean]).booleanValue()
+  given stringDecoder: JooqDecoder[String] = (record, index) => record.get(index, classOf[String])
+  given bigDecimalDecoder: JooqDecoder[BigDecimal] = (record, index) => BigDecimal(record.get(index, classOf[java.math.BigDecimal]))
+  given javaBigDecimalDecoder: JooqDecoder[java.math.BigDecimal] = (record, index) => record.get(index, classOf[java.math.BigDecimal])
+  given byteArrayDecoder: JooqDecoder[Array[Byte]] = (record, index) => record.get(index, classOf[Array[Byte]])
+
+  // Date/Time types
+  given localDateDecoder: JooqDecoder[java.time.LocalDate] = (record, index) => record.get(index, classOf[java.time.LocalDate])
+  given localTimeDecoder: JooqDecoder[java.time.LocalTime] = (record, index) => record.get(index, classOf[java.time.LocalTime])
+  given localDateTimeDecoder: JooqDecoder[java.time.LocalDateTime] = (record, index) => record.get(index, classOf[java.time.LocalDateTime])
+  given instantDecoder: JooqDecoder[java.time.Instant] = (record, index) => record.get(index, classOf[java.time.Instant])
+  given offsetDateTimeDecoder: JooqDecoder[java.time.OffsetDateTime] = (record, index) => record.get(index, classOf[java.time.OffsetDateTime])
+  given zonedDateTimeDecoder: JooqDecoder[java.time.ZonedDateTime] = (record, index) => record.get(index, classOf[java.time.ZonedDateTime])
+
+  // Option types
   given optionIntDecoder: JooqDecoder[Option[Int]] = (record, index) =>
     Option(record.get(index, classOf[java.lang.Integer])).map(_.intValue())
+  given optionLongDecoder: JooqDecoder[Option[Long]] = (record, index) =>
+    Option(record.get(index, classOf[java.lang.Long])).map(_.longValue())
+  given optionDoubleDecoder: JooqDecoder[Option[Double]] = (record, index) =>
+    Option(record.get(index, classOf[java.lang.Double])).map(_.doubleValue())
+  given optionBooleanDecoder: JooqDecoder[Option[Boolean]] = (record, index) =>
+    Option(record.get(index, classOf[java.lang.Boolean])).map(_.booleanValue())
   given optionStringDecoder: JooqDecoder[Option[String]] = (record, index) =>
     Option(record.get(index, classOf[String]))
+  given optionBigDecimalDecoder: JooqDecoder[Option[BigDecimal]] = (record, index) =>
+    Option(record.get(index, classOf[java.math.BigDecimal])).map(BigDecimal(_))
+  given optionLocalDateDecoder: JooqDecoder[Option[java.time.LocalDate]] = (record, index) =>
+    Option(record.get(index, classOf[java.time.LocalDate]))
+  given optionLocalDateTimeDecoder: JooqDecoder[Option[java.time.LocalDateTime]] = (record, index) =>
+    Option(record.get(index, classOf[java.time.LocalDateTime]))
 }
 
 // ========== Macro implementations ==========
