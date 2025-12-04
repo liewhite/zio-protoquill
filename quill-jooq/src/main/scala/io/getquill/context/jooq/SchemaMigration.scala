@@ -278,15 +278,28 @@ object SchemaMigration {
     }
   }
 
-  // ========== DDL Generation (using jOOQ DSL) ==========
+  // ========== DDL Execution (using jOOQ DSL) ==========
 
   /**
-   * Generate DDL statements for a schema diff using jOOQ DSL.
-   * This ensures proper SQL generation for each database dialect.
+   * Execute DDL for a schema diff using jOOQ DSL.
+   * jOOQ handles dialect-specific SQL generation and execution.
    *
-   * @param diff Schema diff to generate DDL for
-   * @param dslCtx jOOQ DSLContext with proper dialect configuration
-   * @return List of DDL statements
+   * @param diff Schema diff to apply
+   * @param dslCtx jOOQ DSLContext with connection and dialect
+   * @return List of executed SQL statements (for reporting)
+   */
+  def executeDDL(
+    diff: SchemaDiff,
+    dslCtx: DSLContext
+  ): List[String] = {
+    val table = DSL.table(DSL.name(diff.tableName))
+    diff.diffs.flatMap { d =>
+      executeColumnDDL(table, d, dslCtx)
+    }
+  }
+
+  /**
+   * Generate DDL statements without executing (for preview/dry-run)
    */
   def generateDDL(
     diff: SchemaDiff,
@@ -309,63 +322,88 @@ object SchemaMigration {
     generateDDL(diff, dslCtx)
   }
 
-  private def generateColumnDDL(
+  private def executeColumnDDL(
     table: org.jooq.Table[?],
     diff: ColumnDiff,
     dslCtx: DSLContext
   ): List[String] = {
-    import org.jooq.impl.SQLDataType
-
     diff match {
       case ColumnDiff.Add(column) =>
         val dataType = sqlTypeToJooqDataType(column.sqlType)
         val finalType = if (column.nullable) dataType.nullable(true) else dataType.nullable(false)
-        val ddl = dslCtx.alterTable(table)
-          .addColumn(DSL.field(DSL.name(column.name), finalType))
-          .getSQL
-        List(ddl)
+        val query = dslCtx.alterTable(table).addColumn(DSL.field(DSL.name(column.name), finalType))
+        query.execute()
+        List(query.getSQL)
 
       case ColumnDiff.Drop(colName) =>
-        val ddl = dslCtx.alterTable(table)
-          .dropColumn(DSL.field(DSL.name(colName)))
-          .getSQL
-        List(ddl)
+        val query = dslCtx.alterTable(table).dropColumn(DSL.field(DSL.name(colName)))
+        query.execute()
+        List(query.getSQL)
 
       case ColumnDiff.Rename(oldName, newName) =>
-        val ddl = dslCtx.alterTable(table)
+        val query = dslCtx.alterTable(table)
           .renameColumn(DSL.field(DSL.name(oldName)))
           .to(DSL.field(DSL.name(newName)))
-          .getSQL
-        List(ddl)
+        query.execute()
+        List(query.getSQL)
 
       case ColumnDiff.Modify(oldCol, newCol) =>
         val stmts = mutable.ListBuffer.empty[String]
         val field = DSL.field(DSL.name(newCol.name))
 
-        // Type change
         if (oldCol.sqlType != newCol.sqlType) {
           val newType = sqlTypeToJooqDataType(newCol.sqlType)
-          val ddl = dslCtx.alterTable(table)
-            .alterColumn(field)
-            .set(newType)
-            .getSQL
-          stmts += ddl
+          val query = dslCtx.alterTable(table).alterColumn(field).set(newType)
+          query.execute()
+          stmts += query.getSQL
         }
 
-        // Nullable change
         if (oldCol.nullable != newCol.nullable) {
-          val ddl = if (newCol.nullable) {
-            dslCtx.alterTable(table)
-              .alterColumn(field)
-              .dropNotNull()
-              .getSQL
+          val query = if (newCol.nullable) {
+            dslCtx.alterTable(table).alterColumn(field).dropNotNull()
           } else {
-            dslCtx.alterTable(table)
-              .alterColumn(field)
-              .setNotNull()
-              .getSQL
+            dslCtx.alterTable(table).alterColumn(field).setNotNull()
           }
-          stmts += ddl
+          query.execute()
+          stmts += query.getSQL
+        }
+
+        stmts.toList
+    }
+  }
+
+  private def generateColumnDDL(
+    table: org.jooq.Table[?],
+    diff: ColumnDiff,
+    dslCtx: DSLContext
+  ): List[String] = {
+    diff match {
+      case ColumnDiff.Add(column) =>
+        val dataType = sqlTypeToJooqDataType(column.sqlType)
+        val finalType = if (column.nullable) dataType.nullable(true) else dataType.nullable(false)
+        List(dslCtx.alterTable(table).addColumn(DSL.field(DSL.name(column.name), finalType)).getSQL)
+
+      case ColumnDiff.Drop(colName) =>
+        List(dslCtx.alterTable(table).dropColumn(DSL.field(DSL.name(colName))).getSQL)
+
+      case ColumnDiff.Rename(oldName, newName) =>
+        List(dslCtx.alterTable(table).renameColumn(DSL.field(DSL.name(oldName))).to(DSL.field(DSL.name(newName))).getSQL)
+
+      case ColumnDiff.Modify(oldCol, newCol) =>
+        val stmts = mutable.ListBuffer.empty[String]
+        val field = DSL.field(DSL.name(newCol.name))
+
+        if (oldCol.sqlType != newCol.sqlType) {
+          val newType = sqlTypeToJooqDataType(newCol.sqlType)
+          stmts += dslCtx.alterTable(table).alterColumn(field).set(newType).getSQL
+        }
+
+        if (oldCol.nullable != newCol.nullable) {
+          stmts += (if (newCol.nullable) {
+            dslCtx.alterTable(table).alterColumn(field).dropNotNull().getSQL
+          } else {
+            dslCtx.alterTable(table).alterColumn(field).setNotNull().getSQL
+          })
         }
 
         stmts.toList
@@ -373,7 +411,26 @@ object SchemaMigration {
   }
 
   /**
-   * Generate CREATE TABLE statement using jOOQ DSL
+   * Execute CREATE TABLE using jOOQ DSL
+   */
+  def executeCreateTable(
+    schema: TableSchema,
+    dslCtx: DSLContext
+  ): String = {
+    var createStep = dslCtx.createTable(DSL.table(DSL.name(schema.name)))
+
+    schema.columns.foreach { col =>
+      val dataType = sqlTypeToJooqDataType(col.sqlType)
+      val finalType = if (col.nullable) dataType.nullable(true) else dataType.nullable(false)
+      createStep = createStep.column(DSL.field(DSL.name(col.name), finalType))
+    }
+
+    createStep.execute()
+    createStep.getSQL
+  }
+
+  /**
+   * Generate CREATE TABLE SQL without executing (for preview)
    */
   def generateCreateTable(
     schema: TableSchema,

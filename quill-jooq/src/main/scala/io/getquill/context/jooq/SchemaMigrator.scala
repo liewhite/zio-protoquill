@@ -2,6 +2,7 @@ package io.getquill.context.jooq
 
 import io.getquill.NamingStrategy
 import org.jooq.SQLDialect
+import org.jooq.impl.DSL
 import zio.{ZIO, ZLayer}
 
 import java.sql.{Connection, SQLException}
@@ -128,11 +129,13 @@ class SchemaMigrator[+N <: NamingStrategy](
     renameMapping: Option[Map[String, String]],
     conn: Connection
   ): MigrationReport = {
+    // Create jOOQ DSLContext with connection - jOOQ handles execution
+    val dslCtx = DSL.using(conn, dialect)
+
     // Check if table exists
     if (!tableExists(codeSchema.name, naming, conn)) {
-      // Create new table
-      val ddl = generateCreateTable(codeSchema, dialect)
-      executeStatement(conn, ddl)
+      // Create new table using jOOQ
+      val ddl = executeCreateTable(codeSchema, dslCtx)
       return MigrationReport(
         tableName = codeSchema.name,
         action = MigrationAction.Created,
@@ -158,9 +161,8 @@ class SchemaMigrator[+N <: NamingStrategy](
         )
 
       case Right(diff) =>
-        // Generate and execute DDL
-        val ddlStatements = generateDDL(diff, dialect)
-        ddlStatements.foreach(stmt => executeStatement(conn, stmt))
+        // Execute DDL using jOOQ (returns executed SQL for reporting)
+        val ddlStatements = executeDDL(diff, dslCtx)
 
         val changes = diff.diffs.map {
           case ColumnDiff.Add(col) => ColumnChange.Added(col.name, col.typeName)
@@ -199,8 +201,11 @@ class SchemaMigrator[+N <: NamingStrategy](
     renameMapping: Option[Map[String, String]],
     conn: Connection
   ): MigrationPreview = {
+    // Use jOOQ DSLContext for generating DDL (without connection for preview-only)
+    val dslCtx = DSL.using(dialect)
+
     if (!tableExists(codeSchema.name, naming, conn)) {
-      val ddl = generateCreateTable(codeSchema, dialect)
+      val ddl = generateCreateTable(codeSchema, dslCtx)
       MigrationPreview(
         tableName = codeSchema.name,
         tableExists = false,
@@ -213,7 +218,7 @@ class SchemaMigrator[+N <: NamingStrategy](
         case Left(ambiguity) =>
           throw new SQLException(ambiguity.getMessage)
         case Right(diff) =>
-          val ddlStatements = if (diff.isEmpty) List.empty else generateDDL(diff, dialect)
+          val ddlStatements = if (diff.isEmpty) List.empty else generateDDL(diff, dslCtx)
           MigrationPreview(
             tableName = codeSchema.name,
             tableExists = true,
@@ -244,15 +249,6 @@ class SchemaMigrator[+N <: NamingStrategy](
           conn.close()
         }
       }.refineToOrDie[SQLException]
-    }
-  }
-
-  private def executeStatement(conn: Connection, sql: String): Unit = {
-    val stmt = conn.createStatement()
-    try {
-      stmt.execute(sql)
-    } finally {
-      stmt.close()
     }
   }
 }
