@@ -43,32 +43,34 @@ class ZioJooqContext[+N <: NamingStrategy](
   // GenericEncoder instances for lift() macro support
   // These are pass-through encoders since jOOQ handles actual encoding
   // The value is captured by EagerPlanter and used during jOOQ translation
-  implicit val intEncoder: GenericEncoder[Int, Connection, Connection] = (_, v, row, _) => row
-  implicit val longEncoder: GenericEncoder[Long, Connection, Connection] = (_, v, row, _) => row
-  implicit val shortEncoder: GenericEncoder[Short, Connection, Connection] = (_, v, row, _) => row
-  implicit val byteEncoder: GenericEncoder[Byte, Connection, Connection] = (_, v, row, _) => row
-  implicit val floatEncoder: GenericEncoder[Float, Connection, Connection] = (_, v, row, _) => row
-  implicit val doubleEncoder: GenericEncoder[Double, Connection, Connection] = (_, v, row, _) => row
-  implicit val booleanEncoder: GenericEncoder[Boolean, Connection, Connection] = (_, v, row, _) => row
-  implicit val stringEncoder: GenericEncoder[String, Connection, Connection] = (_, v, row, _) => row
-  implicit val bigDecimalEncoder: GenericEncoder[BigDecimal, Connection, Connection] = (_, v, row, _) => row
-  implicit val javaBigDecimalEncoder: GenericEncoder[java.math.BigDecimal, Connection, Connection] = (_, v, row, _) => row
-  implicit val byteArrayEncoder: GenericEncoder[Array[Byte], Connection, Connection] = (_, v, row, _) => row
+  private def passthrough[T]: GenericEncoder[T, Connection, Connection] = (_, _, row, _) => row
+
+  implicit val intEncoder: GenericEncoder[Int, Connection, Connection] = passthrough
+  implicit val longEncoder: GenericEncoder[Long, Connection, Connection] = passthrough
+  implicit val shortEncoder: GenericEncoder[Short, Connection, Connection] = passthrough
+  implicit val byteEncoder: GenericEncoder[Byte, Connection, Connection] = passthrough
+  implicit val floatEncoder: GenericEncoder[Float, Connection, Connection] = passthrough
+  implicit val doubleEncoder: GenericEncoder[Double, Connection, Connection] = passthrough
+  implicit val booleanEncoder: GenericEncoder[Boolean, Connection, Connection] = passthrough
+  implicit val stringEncoder: GenericEncoder[String, Connection, Connection] = passthrough
+  implicit val bigDecimalEncoder: GenericEncoder[BigDecimal, Connection, Connection] = passthrough
+  implicit val javaBigDecimalEncoder: GenericEncoder[java.math.BigDecimal, Connection, Connection] = passthrough
+  implicit val byteArrayEncoder: GenericEncoder[Array[Byte], Connection, Connection] = passthrough
 
   // Date/Time encoders
-  implicit val localDateEncoder: GenericEncoder[java.time.LocalDate, Connection, Connection] = (_, v, row, _) => row
-  implicit val localTimeEncoder: GenericEncoder[java.time.LocalTime, Connection, Connection] = (_, v, row, _) => row
-  implicit val localDateTimeEncoder: GenericEncoder[java.time.LocalDateTime, Connection, Connection] = (_, v, row, _) => row
-  implicit val instantEncoder: GenericEncoder[java.time.Instant, Connection, Connection] = (_, v, row, _) => row
-  implicit val offsetDateTimeEncoder: GenericEncoder[java.time.OffsetDateTime, Connection, Connection] = (_, v, row, _) => row
-  implicit val zonedDateTimeEncoder: GenericEncoder[java.time.ZonedDateTime, Connection, Connection] = (_, v, row, _) => row
+  implicit val localDateEncoder: GenericEncoder[java.time.LocalDate, Connection, Connection] = passthrough
+  implicit val localTimeEncoder: GenericEncoder[java.time.LocalTime, Connection, Connection] = passthrough
+  implicit val localDateTimeEncoder: GenericEncoder[java.time.LocalDateTime, Connection, Connection] = passthrough
+  implicit val instantEncoder: GenericEncoder[java.time.Instant, Connection, Connection] = passthrough
+  implicit val offsetDateTimeEncoder: GenericEncoder[java.time.OffsetDateTime, Connection, Connection] = passthrough
+  implicit val zonedDateTimeEncoder: GenericEncoder[java.time.ZonedDateTime, Connection, Connection] = passthrough
 
   // Option encoders
-  implicit val optionIntEncoder: GenericEncoder[Option[Int], Connection, Connection] = (_, v, row, _) => row
-  implicit val optionLongEncoder: GenericEncoder[Option[Long], Connection, Connection] = (_, v, row, _) => row
-  implicit val optionDoubleEncoder: GenericEncoder[Option[Double], Connection, Connection] = (_, v, row, _) => row
-  implicit val optionBooleanEncoder: GenericEncoder[Option[Boolean], Connection, Connection] = (_, v, row, _) => row
-  implicit val optionStringEncoder: GenericEncoder[Option[String], Connection, Connection] = (_, v, row, _) => row
+  implicit val optionIntEncoder: GenericEncoder[Option[Int], Connection, Connection] = passthrough
+  implicit val optionLongEncoder: GenericEncoder[Option[Long], Connection, Connection] = passthrough
+  implicit val optionDoubleEncoder: GenericEncoder[Option[Double], Connection, Connection] = passthrough
+  implicit val optionBooleanEncoder: GenericEncoder[Option[Boolean], Connection, Connection] = passthrough
+  implicit val optionStringEncoder: GenericEncoder[Option[String], Connection, Connection] = passthrough
 
   // Result types
   type RunQueryResult[T] = List[T]
@@ -111,166 +113,102 @@ class ZioJooqContext[+N <: NamingStrategy](
   inline def liftQuery[U[_] <: Iterable[_], T](inline runtimeValue: U[T]): QuillQuery[T] =
     ${ LiftQueryMacro[T, U, PrepareRow, Session]('runtimeValue) }
 
+  // ========== Internal helpers ==========
+
+  /** Execute a database operation with connection management */
+  private def withConnection[T](f: (DSLContext, JooqAstTranslator.TranslationContext) => T): Result[T] =
+    ZIO.serviceWithZIO[DataSource] { ds =>
+      ZIO.attemptBlocking {
+        val conn = ds.getConnection()
+        try {
+          val dslCtx = DSL.using(conn, dialect)
+          val translationCtx = JooqAstTranslator.TranslationContext(naming)
+          f(dslCtx, translationCtx)
+        } finally {
+          conn.close()
+        }
+      }.refineToOrDie[SQLException]
+    }
+
+  /** Bind lift values to translation context */
+  private def bindLifts(lifts: List[Planter[?, ?, ?]], ctx: JooqAstTranslator.TranslationContext): Unit =
+    lifts.foreach {
+      case p: EagerPlanter[?, ?, ?]     => ctx.addBinding(p.uid, p.value)
+      case p: EagerListPlanter[?, ?, ?] => ctx.addListBinding(p.uid, p.values)
+      case _                            => // Other planters handled differently
+    }
+
   // ========== Internal execution methods ==========
 
   def executeQuery[T](
       ast: Ast,
       lifts: List[Planter[?, ?, ?]],
       extractor: (Record, Int) => T
-  ): Result[List[T]] = {
-    ZIO.serviceWithZIO[DataSource] { ds =>
-      ZIO.attemptBlocking {
-        val conn = ds.getConnection()
-        try {
-          val dslCtx = DSL.using(conn, dialect)
-          val translationCtx = JooqAstTranslator.TranslationContext(naming)
-
-          // Bind lift values
-          lifts.foreach {
-            case p: EagerPlanter[?, ?, ?] =>
-              translationCtx.addBinding(p.uid, p.value)
-            case p: EagerListPlanter[?, ?, ?] =>
-              translationCtx.addListBinding(p.uid, p.values)
-            case _ => // Other planters handled differently
-          }
-
-          val query = JooqAstTranslator.translateQuery(ast, translationCtx, dslCtx)
-
-          // Bind parameters
-          val boundQuery = bindParameters(query, translationCtx.bindings.toList)
-
-          // Execute and extract results
-          val result = boundQuery.fetch()
-          result.asScala.toList.zipWithIndex.map { case (record, idx) =>
-            extractor(record, idx)
-          }
-        } finally {
-          conn.close()
-        }
-      }.refineToOrDie[SQLException]
+  ): Result[List[T]] =
+    withConnection { (dslCtx, translationCtx) =>
+      bindLifts(lifts, translationCtx)
+      val query = JooqAstTranslator.translateQuery(ast, translationCtx, dslCtx)
+      val boundQuery = bindParameters(query, translationCtx.bindings.toList)
+      val result = boundQuery.fetch()
+      result.asScala.toList.zipWithIndex.map { case (record, idx) =>
+        extractor(record, idx)
+      }
     }
-  }
 
   def executeQuerySingle[T](
       ast: Ast,
       lifts: List[Planter[?, ?, ?]],
       extractor: (Record, Int) => T
-  ): Result[T] = {
-    executeQuery(ast, lifts, extractor).flatMap { results =>
-      results match {
-        case head :: Nil => ZIO.succeed(head)
-        case Nil => ZIO.fail(new SQLException("Expected single result but got none"))
-        case _ => ZIO.fail(new SQLException(s"Expected single result but got ${results.size}"))
-      }
+  ): Result[T] =
+    executeQuery(ast, lifts, extractor).flatMap {
+      case head :: Nil => ZIO.succeed(head)
+      case Nil         => ZIO.fail(new SQLException("Expected single result but got none"))
+      case results     => ZIO.fail(new SQLException(s"Expected single result but got ${results.size}"))
     }
-  }
 
   def executeAction(
       ast: Ast,
       lifts: List[Planter[?, ?, ?]]
-  ): Result[Long] = {
-    ZIO.serviceWithZIO[DataSource] { ds =>
-      ZIO.attemptBlocking {
-        val conn = ds.getConnection()
-        try {
-          val dslCtx = DSL.using(conn, dialect)
-          val translationCtx = JooqAstTranslator.TranslationContext(naming)
-
-          lifts.foreach {
-            case p: EagerPlanter[?, ?, ?] =>
-              translationCtx.addBinding(p.uid, p.value)
-            case p: EagerListPlanter[?, ?, ?] =>
-              translationCtx.addListBinding(p.uid, p.values)
-            case _ =>
-          }
-
-          val rowsAffected = ast match {
-            case insert: Insert =>
-              val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
-              bindParametersInsert(query, translationCtx.bindings.toList).execute()
-
-            case update: Update =>
-              val query = JooqAstTranslator.translateUpdate(update, translationCtx, dslCtx)
-              bindParametersUpdate(query, translationCtx.bindings.toList).execute()
-
-            case delete: Delete =>
-              val query = JooqAstTranslator.translateDelete(delete, translationCtx, dslCtx)
-              bindParametersDelete(query, translationCtx.bindings.toList).execute()
-
-            case _ =>
-              throw new UnsupportedOperationException(s"Unsupported action: ${ast.getClass.getSimpleName}")
-          }
-
-          rowsAffected.toLong
-        } finally {
-          conn.close()
-        }
-      }.refineToOrDie[SQLException]
+  ): Result[Long] =
+    withConnection { (dslCtx, translationCtx) =>
+      bindLifts(lifts, translationCtx)
+      executeSingleAction(ast, dslCtx, translationCtx)
     }
-  }
 
   def executeActionReturning[T](
       ast: Ast,
       lifts: List[Planter[?, ?, ?]],
       extractor: (Record, Int) => T
-  ): Result[T] = {
-    ZIO.serviceWithZIO[DataSource] { ds =>
-      ZIO.attemptBlocking {
-        val conn = ds.getConnection()
-        try {
-          val dslCtx = DSL.using(conn, dialect)
-          val translationCtx = JooqAstTranslator.TranslationContext(naming)
+  ): Result[T] =
+    withConnection { (dslCtx, translationCtx) =>
+      bindLifts(lifts, translationCtx)
 
-          lifts.foreach {
-            case p: EagerPlanter[?, ?, ?] =>
-              translationCtx.addBinding(p.uid, p.value)
-            case p: EagerListPlanter[?, ?, ?] =>
-              translationCtx.addListBinding(p.uid, p.values)
-            case _ =>
-          }
+      def executeReturning(action: Ast, returningFields: Seq[Field[?]]): T = action match {
+        case insert: Insert =>
+          val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
+          val result = bindParametersInsert(query, translationCtx.bindings.toList).returningResult(returningFields*).fetchOne()
+          extractor(result, 0)
 
-          ast match {
-            case Returning(action, alias, body) =>
-              val returningFields = extractReturningFields(body, alias, translationCtx)
-              action match {
-                case insert: Insert =>
-                  val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
-                  val boundQuery = bindParametersInsert(query, translationCtx.bindings.toList)
-                  val result = boundQuery.returningResult(returningFields*).fetchOne()
-                  extractor(result, 0)
+        case update: Update =>
+          val query = JooqAstTranslator.translateUpdate(update, translationCtx, dslCtx)
+          val result = bindParametersUpdate(query, translationCtx.bindings.toList).returningResult(returningFields*).fetchOne()
+          extractor(result, 0)
 
-                case update: Update =>
-                  val query = JooqAstTranslator.translateUpdate(update, translationCtx, dslCtx)
-                  val boundQuery = bindParametersUpdate(query, translationCtx.bindings.toList)
-                  val result = boundQuery.returningResult(returningFields*).fetchOne()
-                  extractor(result, 0)
+        case _ =>
+          throw new UnsupportedOperationException(s"Returning not supported for: ${action.getClass.getSimpleName}")
+      }
 
-                case _ =>
-                  throw new UnsupportedOperationException(s"Returning not supported for: ${action.getClass.getSimpleName}")
-              }
+      ast match {
+        case Returning(action, alias, body) =>
+          executeReturning(action, extractReturningFields(body, alias, translationCtx))
 
-            case ReturningGenerated(action, alias, body) =>
-              val returningFields = extractReturningFields(body, alias, translationCtx)
-              action match {
-                case insert: Insert =>
-                  val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
-                  val boundQuery = bindParametersInsert(query, translationCtx.bindings.toList)
-                  val result = boundQuery.returningResult(returningFields*).fetchOne()
-                  extractor(result, 0)
+        case ReturningGenerated(action, alias, body) =>
+          executeReturning(action, extractReturningFields(body, alias, translationCtx))
 
-                case _ =>
-                  throw new UnsupportedOperationException(s"ReturningGenerated not supported for: ${action.getClass.getSimpleName}")
-              }
-
-            case _ =>
-              throw new UnsupportedOperationException(s"Expected Returning/ReturningGenerated, got: ${ast.getClass.getSimpleName}")
-          }
-        } finally {
-          conn.close()
-        }
-      }.refineToOrDie[SQLException]
+        case _ =>
+          throw new UnsupportedOperationException(s"Expected Returning/ReturningGenerated, got: ${ast.getClass.getSimpleName}")
+      }
     }
-  }
 
   /**
    * Extract returning field(s) from the return body AST
@@ -301,45 +239,43 @@ class ZioJooqContext[+N <: NamingStrategy](
   def executeBatchAction(
       ast: Ast,
       liftsBatch: List[List[Planter[?, ?, ?]]]
-  ): Result[List[Long]] = {
+  ): Result[List[Long]] =
     ZIO.serviceWithZIO[DataSource] { ds =>
       ZIO.attemptBlocking {
         val conn = ds.getConnection()
         try {
           val dslCtx = DSL.using(conn, dialect)
-
           liftsBatch.map { lifts =>
             val translationCtx = JooqAstTranslator.TranslationContext(naming)
-            lifts.foreach {
-              case p: EagerPlanter[?, ?, ?] =>
-                translationCtx.addBinding(p.uid, p.value)
-              case p: EagerListPlanter[?, ?, ?] =>
-                translationCtx.addListBinding(p.uid, p.values)
-              case _ =>
-            }
-
-            ast match {
-              case insert: Insert =>
-                val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
-                bindParametersInsert(query, translationCtx.bindings.toList).execute().toLong
-
-              case update: Update =>
-                val query = JooqAstTranslator.translateUpdate(update, translationCtx, dslCtx)
-                bindParametersUpdate(query, translationCtx.bindings.toList).execute().toLong
-
-              case delete: Delete =>
-                val query = JooqAstTranslator.translateDelete(delete, translationCtx, dslCtx)
-                bindParametersDelete(query, translationCtx.bindings.toList).execute().toLong
-
-              case _ =>
-                throw new UnsupportedOperationException(s"Unsupported batch action: ${ast.getClass.getSimpleName}")
-            }
+            bindLifts(lifts, translationCtx)
+            executeSingleAction(ast, dslCtx, translationCtx)
           }
         } finally {
           conn.close()
         }
       }.refineToOrDie[SQLException]
     }
+
+  /** Execute a single action (insert/update/delete) and return affected rows */
+  private def executeSingleAction(
+      ast: Ast,
+      dslCtx: DSLContext,
+      translationCtx: JooqAstTranslator.TranslationContext
+  ): Long = ast match {
+    case insert: Insert =>
+      val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
+      bindParametersInsert(query, translationCtx.bindings.toList).execute().toLong
+
+    case update: Update =>
+      val query = JooqAstTranslator.translateUpdate(update, translationCtx, dslCtx)
+      bindParametersUpdate(query, translationCtx.bindings.toList).execute().toLong
+
+    case delete: Delete =>
+      val query = JooqAstTranslator.translateDelete(delete, translationCtx, dslCtx)
+      bindParametersDelete(query, translationCtx.bindings.toList).execute().toLong
+
+    case _ =>
+      throw new UnsupportedOperationException(s"Unsupported action: ${ast.getClass.getSimpleName}")
   }
 
   // ========== Parameter binding helpers ==========
