@@ -1,6 +1,6 @@
 package io.getquill.context.jooq
 
-import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering, Aggregation, AggregationOperator, GroupByMap}
+import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, ReturningGenerated, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering, Aggregation, AggregationOperator, GroupByMap}
 import io.getquill.NamingStrategy
 import org.jooq.{DSLContext, Record, Field, Condition, Table, SelectSelectStep, SelectJoinStep, SelectConditionStep, ResultQuery, InsertSetStep, InsertSetMoreStep, UpdateSetFirstStep, UpdateSetMoreStep, UpdateConditionStep, DeleteConditionStep, SortField, SelectFieldOrAsterisk, GroupField, AggregateFunction}
 import org.jooq.impl.DSL

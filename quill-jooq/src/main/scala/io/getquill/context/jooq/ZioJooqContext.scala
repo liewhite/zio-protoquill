@@ -3,7 +3,7 @@ package io.getquill.context.jooq
 import io.getquill.{Quoted, Query as QuillQuery, Action, ActionReturning, BatchAction, QAC, NamingStrategy, Literal, SnakeCase, Planter, EagerPlanter}
 import io.getquill.context.{LiftMacro, LiftQueryMacro}
 import io.getquill.generic.GenericEncoder
-import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map as AstMap, SortBy, Take, Drop, Distinct, Join as AstJoin, FlatMap, Returning, Property, Ident as AstIdent, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, PrefixUnaryOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering as AstOrdering}
+import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map as AstMap, SortBy, Take, Drop, Distinct, Join as AstJoin, FlatMap, Returning, ReturningGenerated, Property, Ident as AstIdent, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, PrefixUnaryOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering as AstOrdering}
 import io.getquill.context.RowContext
 import org.jooq.{DSLContext, Record, SQLDialect, Field, Condition, Table, SelectSelectStep, SelectJoinStep, SelectConditionStep, ResultQuery, InsertSetStep, InsertSetMoreStep, UpdateSetFirstStep, UpdateSetMoreStep, UpdateConditionStep, DeleteConditionStep, SortField}
 import org.jooq.impl.DSL
@@ -208,8 +208,7 @@ class ZioJooqContext[+N <: NamingStrategy](
   def executeActionReturning[T](
       ast: Ast,
       lifts: List[Planter[?, ?, ?]],
-      extractor: (Record, Int) => T,
-      returningColumn: String
+      extractor: (Record, Int) => T
   ): Result[T] = {
     ZIO.serviceWithZIO[DataSource] { ds =>
       ZIO.attemptBlocking {
@@ -225,19 +224,71 @@ class ZioJooqContext[+N <: NamingStrategy](
           }
 
           ast match {
-            case insert: Insert =>
-              val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
-              val boundQuery = bindParametersInsert(query, translationCtx.bindings.toList)
-              val result = boundQuery.returning(DSL.field(returningColumn)).fetchOne()
-              extractor(result, 0)
+            case Returning(action, alias, body) =>
+              val returningFields = extractReturningFields(body, alias, translationCtx)
+              action match {
+                case insert: Insert =>
+                  val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
+                  val boundQuery = bindParametersInsert(query, translationCtx.bindings.toList)
+                  val result = boundQuery.returningResult(returningFields*).fetchOne()
+                  extractor(result, 0)
+
+                case update: Update =>
+                  val query = JooqAstTranslator.translateUpdate(update, translationCtx, dslCtx)
+                  val boundQuery = bindParametersUpdate(query, translationCtx.bindings.toList)
+                  val result = boundQuery.returningResult(returningFields*).fetchOne()
+                  extractor(result, 0)
+
+                case _ =>
+                  throw new UnsupportedOperationException(s"Returning not supported for: ${action.getClass.getSimpleName}")
+              }
+
+            case ReturningGenerated(action, alias, body) =>
+              val returningFields = extractReturningFields(body, alias, translationCtx)
+              action match {
+                case insert: Insert =>
+                  val query = JooqAstTranslator.translateInsert(insert, translationCtx, dslCtx)
+                  val boundQuery = bindParametersInsert(query, translationCtx.bindings.toList)
+                  val result = boundQuery.returningResult(returningFields*).fetchOne()
+                  extractor(result, 0)
+
+                case _ =>
+                  throw new UnsupportedOperationException(s"ReturningGenerated not supported for: ${action.getClass.getSimpleName}")
+              }
 
             case _ =>
-              throw new UnsupportedOperationException(s"Returning not supported for: ${ast.getClass.getSimpleName}")
+              throw new UnsupportedOperationException(s"Expected Returning/ReturningGenerated, got: ${ast.getClass.getSimpleName}")
           }
         } finally {
           conn.close()
         }
       }.refineToOrDie[SQLException]
+    }
+  }
+
+  /**
+   * Extract returning field(s) from the return body AST
+   */
+  private def extractReturningFields(body: Ast, alias: AstIdent, ctx: JooqAstTranslator.TranslationContext): Seq[Field[?]] = {
+    body match {
+      case Property(AstIdent(name, _), propName) if name == alias.name =>
+        val colName = ctx.applyColumnNaming(propName)
+        Seq(DSL.field(DSL.name(colName)))
+
+      case Tuple(values) =>
+        values.flatMap(v => extractReturningFields(v, alias, ctx))
+
+      case CaseClass(_, fields) =>
+        fields.flatMap { case (_, ast) =>
+          extractReturningFields(ast, alias, ctx)
+        }
+
+      case AstIdent(name, _) if name == alias.name =>
+        // Returning the whole entity - not supported directly, would need schema info
+        throw new UnsupportedOperationException("Returning whole entity not yet supported")
+
+      case _ =>
+        throw new UnsupportedOperationException(s"Unsupported returning body: ${body.getClass.getSimpleName}")
     }
   }
 
@@ -458,15 +509,11 @@ object ZioJooqContextMacro {
       JooqDecoderMacro.summon[T]
     }
 
-    // Extract returning column name from AST - simplified for now
-    val returningColumn = '{ "id" }
-
     '{
       $ctx.executeActionReturning[T](
         $ast,
         $lifts,
-        (record, idx) => $decoder.decode(record, 0),
-        $returningColumn
+        (record, idx) => $decoder.decode(record, 0)
       )
     }
   }

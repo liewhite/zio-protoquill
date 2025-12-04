@@ -307,6 +307,56 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
     // GroupByMap returns tuples which need additional decoder support
     // These will be added in future iterations
 
+    // ========== RETURNING Tests ==========
+
+    "INSERT with RETURNING - single column" in {
+      val q = quote {
+        query[Person].insert(
+          _.id -> lift(400),
+          _.name -> lift("Frank"),
+          _.age -> lift(45)
+        ).returning(r => r.id)
+      }
+      val returnedId = runZIO(ctx.run(q))
+      returnedId mustBe 400
+
+      // Verify insertion
+      val verifyQ = quote {
+        query[Person].filter(p => p.id == 400)
+      }
+      val result = runZIO(ctx.run(verifyQ))
+      result.size mustBe 1
+      result.head.name mustBe "Frank"
+    }
+
+    "INSERT with RETURNING - different column" in {
+      val q = quote {
+        query[Person].insert(
+          _.id -> lift(401),
+          _.name -> lift("Grace"),
+          _.age -> lift(33)
+        ).returning(r => r.name)
+      }
+      val returnedName = runZIO(ctx.run(q))
+      returnedName mustBe "Grace"
+    }
+
+    "UPDATE with RETURNING - single column" in {
+      // First insert a record to update
+      val conn = dataSource.getConnection()
+      try {
+        conn.createStatement().execute("INSERT INTO Person (id, name, age) VALUES (500, 'Henry', 50)")
+      } finally {
+        conn.close()
+      }
+
+      val q = quote {
+        query[Person].filter(p => p.id == 500).update(_.age -> lift(51)).returning(r => r.age)
+      }
+      val returnedAge = runZIO(ctx.run(q))
+      returnedAge mustBe 51
+    }
+
   }
 
 }
