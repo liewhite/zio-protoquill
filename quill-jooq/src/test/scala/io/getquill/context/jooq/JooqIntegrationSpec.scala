@@ -39,7 +39,7 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
   val dataSource = new SimpleDataSource(dbUrl)
 
   // Create the jOOQ context
-  val ctx = new ZioJooqContext[Literal](SQLDialect.SQLITE, Literal)
+  val ctx = new ZioJooqContext(SQLDialect.SQLITE, Literal)
   import ctx.*
 
   // Helper to run ZIO effects
@@ -83,9 +83,7 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
   "ZioJooqContext Integration" - {
 
     "SELECT - query all" in {
-      val q = quote {
-        query[Person]
-      }
+      inline def q = query[Person]
       val result = runZIO(ctx.run(q))
       result.size mustBe 3
       result.map(_.name) must contain allOf ("Alice", "Bob", "Charlie")
@@ -102,9 +100,8 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
 
     "SELECT - filter with lift" in {
       val targetId = 2
-      val q = quote {
-        query[Person].filter(p => p.id == lift(targetId))
-      }
+      inline def q = query[Person].filter(p => p.id == lift(targetId))
+      
       val result = runZIO(ctx.run(q))
       result.size mustBe 1
       result.head.name mustBe "Bob"
@@ -173,7 +170,7 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
     "INSERT - single row" in {
       val q = quote {
         query[Person].insert(
-          _.id -> 100,
+          _.id -> (100),
           _.name -> lift("David"),
           _.age -> lift(40)
         )
