@@ -77,11 +77,29 @@ object JooqAstTranslator {
         }
 
       case Take(query, n) =>
+        val limit = translateConstantInt(n)
         query match {
           case entity: Entity =>
             val table = translateEntity(entity, ctx)
-            val limit = translateConstantInt(n)
             dslCtx.selectFrom(table).limit(limit)
+          case SortBy(innerQuery, alias, sortBy, ordering) =>
+            innerQuery match {
+              case e: Entity =>
+                val table = translateEntity(e, ctx)
+                val orderFields = translateOrdering(sortBy, ordering, alias.name, ctx)
+                dslCtx.selectFrom(table).orderBy(orderFields*).limit(limit)
+              case Filter(fe: Entity, fAlias, predicate) =>
+                val table = translateEntity(fe, ctx)
+                val condition = translateCondition(predicate, fAlias.name, ctx)
+                val orderFields = translateOrdering(sortBy, ordering, alias.name, ctx)
+                dslCtx.selectFrom(table).where(condition).orderBy(orderFields*).limit(limit)
+              case _ =>
+                throw new UnsupportedOperationException("Complex sorted limited queries not yet supported")
+            }
+          case Filter(fe: Entity, fAlias, predicate) =>
+            val table = translateEntity(fe, ctx)
+            val condition = translateCondition(predicate, fAlias.name, ctx)
+            dslCtx.selectFrom(table).where(condition).limit(limit)
           case _ =>
             throw new UnsupportedOperationException("Complex limited queries not yet supported")
         }

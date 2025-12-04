@@ -2,6 +2,7 @@ package io.getquill.context.jooq
 
 import io.getquill.{Quoted, Query as QuillQuery, Action, ActionReturning, BatchAction, QAC, NamingStrategy, Literal, SnakeCase, Planter, EagerPlanter}
 import io.getquill.context.{LiftMacro, LiftQueryMacro}
+import io.getquill.generic.GenericEncoder
 import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map as AstMap, SortBy, Take, Drop, Distinct, Join as AstJoin, FlatMap, Returning, Property, Ident as AstIdent, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, PrefixUnaryOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering as AstOrdering}
 import io.getquill.context.RowContext
 import org.jooq.{DSLContext, Record, SQLDialect, Field, Condition, Table, SelectSelectStep, SelectJoinStep, SelectConditionStep, ResultQuery, InsertSetStep, InsertSetMoreStep, UpdateSetFirstStep, UpdateSetMoreStep, UpdateConditionStep, DeleteConditionStep, SortField}
@@ -38,6 +39,36 @@ class ZioJooqContext[+N <: NamingStrategy](
   // Encoders and Decoders
   type Encoder[T] = JooqEncoder[T]
   type Decoder[T] = JooqDecoder[T]
+
+  // GenericEncoder instances for lift() macro support
+  // These are pass-through encoders since jOOQ handles actual encoding
+  // The value is captured by EagerPlanter and used during jOOQ translation
+  implicit val intEncoder: GenericEncoder[Int, Connection, Connection] = (_, v, row, _) => row
+  implicit val longEncoder: GenericEncoder[Long, Connection, Connection] = (_, v, row, _) => row
+  implicit val shortEncoder: GenericEncoder[Short, Connection, Connection] = (_, v, row, _) => row
+  implicit val byteEncoder: GenericEncoder[Byte, Connection, Connection] = (_, v, row, _) => row
+  implicit val floatEncoder: GenericEncoder[Float, Connection, Connection] = (_, v, row, _) => row
+  implicit val doubleEncoder: GenericEncoder[Double, Connection, Connection] = (_, v, row, _) => row
+  implicit val booleanEncoder: GenericEncoder[Boolean, Connection, Connection] = (_, v, row, _) => row
+  implicit val stringEncoder: GenericEncoder[String, Connection, Connection] = (_, v, row, _) => row
+  implicit val bigDecimalEncoder: GenericEncoder[BigDecimal, Connection, Connection] = (_, v, row, _) => row
+  implicit val javaBigDecimalEncoder: GenericEncoder[java.math.BigDecimal, Connection, Connection] = (_, v, row, _) => row
+  implicit val byteArrayEncoder: GenericEncoder[Array[Byte], Connection, Connection] = (_, v, row, _) => row
+
+  // Date/Time encoders
+  implicit val localDateEncoder: GenericEncoder[java.time.LocalDate, Connection, Connection] = (_, v, row, _) => row
+  implicit val localTimeEncoder: GenericEncoder[java.time.LocalTime, Connection, Connection] = (_, v, row, _) => row
+  implicit val localDateTimeEncoder: GenericEncoder[java.time.LocalDateTime, Connection, Connection] = (_, v, row, _) => row
+  implicit val instantEncoder: GenericEncoder[java.time.Instant, Connection, Connection] = (_, v, row, _) => row
+  implicit val offsetDateTimeEncoder: GenericEncoder[java.time.OffsetDateTime, Connection, Connection] = (_, v, row, _) => row
+  implicit val zonedDateTimeEncoder: GenericEncoder[java.time.ZonedDateTime, Connection, Connection] = (_, v, row, _) => row
+
+  // Option encoders
+  implicit val optionIntEncoder: GenericEncoder[Option[Int], Connection, Connection] = (_, v, row, _) => row
+  implicit val optionLongEncoder: GenericEncoder[Option[Long], Connection, Connection] = (_, v, row, _) => row
+  implicit val optionDoubleEncoder: GenericEncoder[Option[Double], Connection, Connection] = (_, v, row, _) => row
+  implicit val optionBooleanEncoder: GenericEncoder[Option[Boolean], Connection, Connection] = (_, v, row, _) => row
+  implicit val optionStringEncoder: GenericEncoder[Option[String], Connection, Connection] = (_, v, row, _) => row
 
   // Result types
   type RunQueryResult[T] = List[T]
