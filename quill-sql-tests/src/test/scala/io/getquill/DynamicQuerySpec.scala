@@ -109,7 +109,7 @@ class DynamicQuerySpec extends Spec { // //
       "dynamic alias list" in {
         val aliases = List[DynamicAlias[TestEntity]](alias(_.i, "ii"), alias(_.s, "ss"))
         test(
-          dynamicQuerySchema[TestEntity]("test", aliases: _*),
+          dynamicQuerySchema[TestEntity]("test", aliases*),
           querySchema[TestEntity]("test", _.i -> "ii", _.s -> "ss")
         )
       }
@@ -241,7 +241,7 @@ class DynamicQuerySpec extends Spec { // //
     "sortBy" in {
       val o = Ord.desc[Int]
       test(
-        dynamicQuery[TestEntity].sortBy(v0 => quote(v0.i))(o),
+        dynamicQuery[TestEntity].sortBy(v0 => quote(v0.i))(using o),
         query[TestEntity].sortBy(v0 => v0.i)(Ord.desc)
       )
     }
