@@ -7,10 +7,11 @@ object WarnMac {
   def applyImpl[F: Type, T: Type, Tail: Type](msg: Expr[String])(using Quotes): Expr[Unit] = {
     import quotes.reflect._
     import io.getquill.util.Format
-    msg match {
-      case Expr(str: String) =>
-        println(s"${str} - ${Format.TypeRepr(TypeRepr.of[F])}: ${Format.TypeRepr(TypeRepr.of[T])} -> ${Format.TypeRepr(TypeRepr.of[Tail])}")
-    }
+    // Debug macro - output commented out to avoid compile-time noise
+    // msg match {
+    //   case Expr(str: String) =>
+    //     println(s"${str} - ${Format.TypeRepr(TypeRepr.of[F])}: ${Format.TypeRepr(TypeRepr.of[T])} -> ${Format.TypeRepr(TypeRepr.of[Tail])}")
+    // }
     '{ () }
   }
 }

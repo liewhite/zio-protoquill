@@ -150,7 +150,7 @@ object Format {
           showErrorTrace
         )
       }.getOrElse {
-        println("====== WARNING: Scalafmt Not Detected ====")
+        // Scalafmt not available, use unformatted code
         encosedCode
       }
 

@@ -60,7 +60,6 @@ object Lifters {
           |Performing a regular unlift instead. Due to exception:
           |${e.stackTraceToString}
           |""".stripMargin
-      println(s"WARNING: ${msg}")
       quotes.reflect.report.warning(msg)
     }
 

@@ -35,11 +35,12 @@ object TupleMember {
     // val memberSymbol = clsType.typeSymbol.memberField("_1")
     // val memberSymbol = clsType.typeSymbol.fieldMember("_1")
     val elab = ElaboratedField(clsType, matchMember)
-    elab match {
-      case ElaboratedField.ZeroArgsMethod(sym) => report.info(s"${sym} is a zero-args member whose type is ${clsType.widen.memberType(sym).widen}")
-      case ElaboratedField.Field(sym)          => report.info(s"${sym} is a field whose type is ${clsType.widen.memberType(sym).widen}")
-      case ElaboratedField.NotFound            => report.info(s"${matchMember} was not found")
-    }
+    // Debug info commented out to avoid compile-time noise
+    // elab match {
+    //   case ElaboratedField.ZeroArgsMethod(sym) => report.info(s"${sym} is a zero-args member whose type is ${clsType.widen.memberType(sym).widen}")
+    //   case ElaboratedField.Field(sym)          => report.info(s"${sym} is a field whose type is ${clsType.widen.memberType(sym).widen}")
+    //   case ElaboratedField.NotFound            => report.info(s"${matchMember} was not found")
+    // }
 
     '{ () }
   }

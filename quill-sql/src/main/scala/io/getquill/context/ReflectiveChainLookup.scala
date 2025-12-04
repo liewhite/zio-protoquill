@@ -32,7 +32,8 @@ private[getquill] object ReflectivePathChainLookup {
     def nullCheck(path: String, cls: Class[_], lookupType: String) =
       elem match {
         case Some(null) =>
-          println(s"The ${lookupType} ${path} can be looked up from ${cls} but the value is null")
+          // Runtime warning - value exists but is null
+          System.err.println(s"[WARN] The ${lookupType} ${path} can be looked up from ${cls} but the value is null")
           None
         case other =>
           other

@@ -37,7 +37,7 @@ case class GenericEncoderWithStringFallback[T, PrepareRow, Session](
       stringConverter match {
         case Right(converter) =>
           // using pprint here because want quotes if it is a string value etc...
-          println(
+          System.err.println(
             s"[WARN] The field value: ${pprint(t).plainText} had the type `${classTagActual}` but was expecting the type `${classTagExpected}`. Will attempt to convert to string and use the provided from-string converter: $converter."
           )
           nullableEncoder(i, Option(t.asInstanceOf[T]).map(v => converter.fromString(v.toString)), row, session)

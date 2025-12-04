@@ -55,7 +55,6 @@ object Summon {
     decoder[ResultRow, Session, T](index, resultRow, session) match {
       case Some(value) => value
       case None =>
-        println(s"WARNING Could not summon a decoder for the type: ${io.getquill.util.Format.TypeOf[T]}")
         report.throwError(s"Cannot find decoder for the type: ${Format.TypeOf[T]}")
     }
   }
@@ -330,7 +329,8 @@ object DecodeSum {
     import quotes.reflect._
     typesTup match {
       case ('[tpe *: types]) =>
-        println(s"(Co-Product) Checking if ${Format.TypeOf[tpe]} == ${Format.Expr(rowTypeClassTag)} and should be spliced into index: ${index}")
+        // Debug log commented out
+        // println(s"(Co-Product) Checking if ${Format.TypeOf[tpe]} == ${Format.Expr(rowTypeClassTag)} and should be spliced into index: ${index}")
         val possibleElementClass =
           Expr.summon[ClassTag[tpe]] match {
             case Some(cls) => '{ $cls.runtimeClass }

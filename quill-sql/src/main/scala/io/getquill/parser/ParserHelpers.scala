@@ -445,7 +445,8 @@ object ParserHelpers {
             Some(PatMatch.AutoAddedTrivialClause)
 
           case m @ Match(expr, caseDefs) =>
-            println(s"Doing Multi-Clause Pat-match: ${Format(Printer.TreeStructure.show(m))}")
+            // Debug log commented out
+            // println(s"Doing Multi-Clause Pat-match: ${Format(Printer.TreeStructure.show(m))}")
             val clauses =
               caseDefs.map {
                 case CaseDef(fields, guard, body) =>

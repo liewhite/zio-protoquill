@@ -99,6 +99,5 @@ object Load {
 inline def loadMac[T]: String = ${ loadMacImpl[T] }
 def loadMacImpl[T: Type](using Quotes): Expr[String] = {
   val loaded = Load.Module[T]
-  println(loaded)
   Expr(loaded.toString)
 }
