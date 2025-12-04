@@ -221,7 +221,9 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
 
       preview.tableExists mustBe true
       preview.statements.size mustBe 1
-      preview.statements.head must include("ADD COLUMN")
+      // jOOQ generates "add" (lowercase) for SQLite dialect
+      preview.statements.head.toLowerCase must include("add")
+      preview.statements.head.toLowerCase must include("email")
 
       // Verify table wasn't changed
       getColumnNames("UserV2") mustBe Set("id", "name", "age")

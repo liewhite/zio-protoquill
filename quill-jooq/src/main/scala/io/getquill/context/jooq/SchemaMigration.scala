@@ -278,91 +278,153 @@ object SchemaMigration {
     }
   }
 
-  // ========== DDL Generation ==========
+  // ========== DDL Generation (using jOOQ DSL) ==========
 
   /**
-   * Generate DDL statements for a schema diff
+   * Generate DDL statements for a schema diff using jOOQ DSL.
+   * This ensures proper SQL generation for each database dialect.
    *
    * @param diff Schema diff to generate DDL for
-   * @param dialect SQL dialect to use
+   * @param dslCtx jOOQ DSLContext with proper dialect configuration
    * @return List of DDL statements
+   */
+  def generateDDL(
+    diff: SchemaDiff,
+    dslCtx: DSLContext
+  ): List[String] = {
+    val table = DSL.table(DSL.name(diff.tableName))
+    diff.diffs.flatMap { d =>
+      generateColumnDDL(table, d, dslCtx)
+    }
+  }
+
+  /**
+   * Overload for backward compatibility - creates DSLContext from dialect
    */
   def generateDDL(
     diff: SchemaDiff,
     dialect: SQLDialect
   ): List[String] = {
-    diff.diffs.flatMap { d =>
-      generateColumnDDL(diff.tableName, d, dialect)
-    }
+    val dslCtx = DSL.using(dialect)
+    generateDDL(diff, dslCtx)
   }
 
   private def generateColumnDDL(
-    tableName: String,
+    table: org.jooq.Table[?],
     diff: ColumnDiff,
-    dialect: SQLDialect
+    dslCtx: DSLContext
   ): List[String] = {
+    import org.jooq.impl.SQLDataType
+
     diff match {
       case ColumnDiff.Add(column) =>
-        val nullStr = if (column.nullable) "" else " NOT NULL"
-        val defaultStr = column.defaultValue.map(v => s" DEFAULT $v").getOrElse("")
-        List(s"ALTER TABLE $tableName ADD COLUMN ${column.name} ${column.typeName}$nullStr$defaultStr")
+        val dataType = sqlTypeToJooqDataType(column.sqlType)
+        val finalType = if (column.nullable) dataType.nullable(true) else dataType.nullable(false)
+        val ddl = dslCtx.alterTable(table)
+          .addColumn(DSL.field(DSL.name(column.name), finalType))
+          .getSQL
+        List(ddl)
 
       case ColumnDiff.Drop(colName) =>
-        List(s"ALTER TABLE $tableName DROP COLUMN $colName")
+        val ddl = dslCtx.alterTable(table)
+          .dropColumn(DSL.field(DSL.name(colName)))
+          .getSQL
+        List(ddl)
 
       case ColumnDiff.Rename(oldName, newName) =>
-        dialect match {
-          case SQLDialect.MYSQL | SQLDialect.MARIADB =>
-            // MySQL uses RENAME COLUMN in 8.0+
-            List(s"ALTER TABLE $tableName RENAME COLUMN $oldName TO $newName")
-          case SQLDialect.POSTGRES =>
-            List(s"ALTER TABLE $tableName RENAME COLUMN $oldName TO $newName")
-          case SQLDialect.SQLITE =>
-            List(s"ALTER TABLE $tableName RENAME COLUMN $oldName TO $newName")
-          case SQLDialect.H2 =>
-            List(s"ALTER TABLE $tableName ALTER COLUMN $oldName RENAME TO $newName")
-          case _ =>
-            List(s"ALTER TABLE $tableName RENAME COLUMN $oldName TO $newName")
-        }
+        val ddl = dslCtx.alterTable(table)
+          .renameColumn(DSL.field(DSL.name(oldName)))
+          .to(DSL.field(DSL.name(newName)))
+          .getSQL
+        List(ddl)
 
       case ColumnDiff.Modify(oldCol, newCol) =>
-        val nullStr = if (newCol.nullable) " NULL" else " NOT NULL"
-        dialect match {
-          case SQLDialect.MYSQL | SQLDialect.MARIADB =>
-            List(s"ALTER TABLE $tableName MODIFY COLUMN ${newCol.name} ${newCol.typeName}$nullStr")
-          case SQLDialect.POSTGRES =>
-            // PostgreSQL requires separate statements for type and nullable
-            val stmts = mutable.ListBuffer.empty[String]
-            if (oldCol.sqlType != newCol.sqlType) {
-              stmts += s"ALTER TABLE $tableName ALTER COLUMN ${newCol.name} TYPE ${newCol.typeName}"
-            }
-            if (oldCol.nullable != newCol.nullable) {
-              if (newCol.nullable) {
-                stmts += s"ALTER TABLE $tableName ALTER COLUMN ${newCol.name} DROP NOT NULL"
-              } else {
-                stmts += s"ALTER TABLE $tableName ALTER COLUMN ${newCol.name} SET NOT NULL"
-              }
-            }
-            stmts.toList
-          case _ =>
-            List(s"ALTER TABLE $tableName ALTER COLUMN ${newCol.name} ${newCol.typeName}$nullStr")
+        val stmts = mutable.ListBuffer.empty[String]
+        val field = DSL.field(DSL.name(newCol.name))
+
+        // Type change
+        if (oldCol.sqlType != newCol.sqlType) {
+          val newType = sqlTypeToJooqDataType(newCol.sqlType)
+          val ddl = dslCtx.alterTable(table)
+            .alterColumn(field)
+            .set(newType)
+            .getSQL
+          stmts += ddl
         }
+
+        // Nullable change
+        if (oldCol.nullable != newCol.nullable) {
+          val ddl = if (newCol.nullable) {
+            dslCtx.alterTable(table)
+              .alterColumn(field)
+              .dropNotNull()
+              .getSQL
+          } else {
+            dslCtx.alterTable(table)
+              .alterColumn(field)
+              .setNotNull()
+              .getSQL
+          }
+          stmts += ddl
+        }
+
+        stmts.toList
     }
   }
 
   /**
-   * Generate CREATE TABLE statement for a new table
+   * Generate CREATE TABLE statement using jOOQ DSL
+   */
+  def generateCreateTable(
+    schema: TableSchema,
+    dslCtx: DSLContext
+  ): String = {
+    var createStep = dslCtx.createTable(DSL.table(DSL.name(schema.name)))
+
+    schema.columns.foreach { col =>
+      val dataType = sqlTypeToJooqDataType(col.sqlType)
+      val finalType = if (col.nullable) dataType.nullable(true) else dataType.nullable(false)
+      createStep = createStep.column(DSL.field(DSL.name(col.name), finalType))
+    }
+
+    createStep.getSQL
+  }
+
+  /**
+   * Overload for backward compatibility
    */
   def generateCreateTable(
     schema: TableSchema,
     dialect: SQLDialect
   ): String = {
-    val columns = schema.columns.map { col =>
-      val nullStr = if (col.nullable) "" else " NOT NULL"
-      val defaultStr = col.defaultValue.map(v => s" DEFAULT $v").getOrElse("")
-      s"  ${col.name} ${col.typeName}$nullStr$defaultStr"
+    val dslCtx = DSL.using(dialect)
+    generateCreateTable(schema, dslCtx)
+  }
+
+  /**
+   * Convert java.sql.Types to jOOQ DataType
+   */
+  private def sqlTypeToJooqDataType(sqlType: Int): org.jooq.DataType[?] = {
+    import org.jooq.impl.SQLDataType
+    sqlType match {
+      case Types.INTEGER => SQLDataType.INTEGER
+      case Types.BIGINT => SQLDataType.BIGINT
+      case Types.SMALLINT => SQLDataType.SMALLINT
+      case Types.TINYINT => SQLDataType.TINYINT
+      case Types.FLOAT => SQLDataType.FLOAT
+      case Types.DOUBLE => SQLDataType.DOUBLE
+      case Types.REAL => SQLDataType.REAL
+      case Types.DECIMAL | Types.NUMERIC => SQLDataType.DECIMAL
+      case Types.VARCHAR => SQLDataType.VARCHAR(255)
+      case Types.CHAR => SQLDataType.CHAR(1)
+      case Types.LONGVARCHAR | Types.CLOB => SQLDataType.CLOB
+      case Types.BOOLEAN | Types.BIT => SQLDataType.BOOLEAN
+      case Types.DATE => SQLDataType.DATE
+      case Types.TIME => SQLDataType.TIME
+      case Types.TIMESTAMP => SQLDataType.TIMESTAMP
+      case Types.BLOB | Types.BINARY | Types.VARBINARY => SQLDataType.BLOB
+      case _ => SQLDataType.VARCHAR(255)
     }
-    s"CREATE TABLE ${schema.name} (\n${columns.mkString(",\n")}\n)"
   }
 
   // ========== SQL Type Helpers ==========
