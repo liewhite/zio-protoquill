@@ -73,18 +73,45 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
 
   // Helper to get column names
   def getColumnNames(tableName: String): Set[String] = {
+    getColumnInfo(tableName).map(_._1).toSet
+  }
+
+  // Helper to get full column info: (name, sqlType, nullable)
+  case class ColumnInfo(name: String, sqlType: Int, nullable: Boolean)
+
+  def getColumnInfo(tableName: String): List[ColumnInfo] = {
     val conn = dataSource.getConnection()
     try {
       val rs = conn.getMetaData.getColumns(null, null, tableName, null)
       try {
-        var cols = Set.empty[String]
+        var cols = List.empty[ColumnInfo]
         while (rs.next()) {
-          cols += rs.getString("COLUMN_NAME")
+          cols = cols :+ ColumnInfo(
+            rs.getString("COLUMN_NAME"),
+            rs.getInt("DATA_TYPE"),
+            rs.getInt("NULLABLE") == java.sql.DatabaseMetaData.columnNullable
+          )
         }
         cols
       } finally {
         rs.close()
       }
+    } finally {
+      conn.close()
+    }
+  }
+
+  // Helper to verify we can actually use the table (insert and query)
+  def verifyTableUsable(tableName: String, insertSql: String, selectSql: String, expectedCount: Int): Unit = {
+    val conn = dataSource.getConnection()
+    try {
+      val stmt = conn.createStatement()
+      stmt.execute(insertSql)
+      val rs = stmt.executeQuery(selectSql)
+      var count = 0
+      while (rs.next()) count += 1
+      rs.close()
+      count mustBe expectedCount
     } finally {
       conn.close()
     }
@@ -107,11 +134,28 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
 
       val report = runZIO(migrator.migrate[User]())
 
+      // Verify report
       report.action mustBe MigrationAction.Created
       report.tableName mustBe "User"
       report.changes.size mustBe 3
+
+      // Verify table exists with correct structure
       tableExists("User") mustBe true
-      getColumnNames("User") mustBe Set("id", "name", "age")
+      val columns = getColumnInfo("User")
+      columns.map(_.name).toSet mustBe Set("id", "name", "age")
+
+      // Verify nullable settings
+      columns.find(_.name == "id").get.nullable mustBe false
+      columns.find(_.name == "name").get.nullable mustBe false
+      columns.find(_.name == "age").get.nullable mustBe false
+
+      // Verify table is usable - insert and query data
+      verifyTableUsable(
+        "User",
+        "INSERT INTO User (id, name, age) VALUES (1, 'Alice', 30)",
+        "SELECT * FROM User WHERE id = 1",
+        expectedCount = 1
+      )
     }
 
     "should report no changes when schema matches" in {
@@ -123,16 +167,22 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
           age INTEGER NOT NULL
         )
       """)
+      val columnsBefore = getColumnInfo("User")
 
       val report = runZIO(migrator.migrate[User]())
 
+      // Verify report
       report.action mustBe MigrationAction.NoChanges
       report.statements mustBe empty
       report.changes mustBe empty
+
+      // Verify table structure unchanged
+      val columnsAfter = getColumnInfo("User")
+      columnsAfter mustBe columnsBefore
     }
 
     "should add new column" in {
-      // Create original table
+      // Create original table and insert test data
       executeSQL("""
         CREATE TABLE UserV2 (
           id INTEGER NOT NULL,
@@ -140,17 +190,32 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
           age INTEGER NOT NULL
         )
       """)
+      executeSQL("INSERT INTO UserV2 (id, name, age) VALUES (1, 'Alice', 30)")
 
       // Migrate to add email column
       val report = runZIO(migrator.migrate[UserV2]())
 
+      // Verify report
       report.action mustBe MigrationAction.Altered
       report.changes must contain(ColumnChange.Added("email", "VARCHAR(255)"))
-      getColumnNames("UserV2") mustBe Set("id", "name", "age", "email")
+
+      // Verify column added with correct properties
+      val columns = getColumnInfo("UserV2")
+      columns.map(_.name).toSet mustBe Set("id", "name", "age", "email")
+      val emailCol = columns.find(_.name == "email").get
+      emailCol.nullable mustBe true  // Option[String] should be nullable
+
+      // Verify existing data preserved and new column works
+      verifyTableUsable(
+        "UserV2",
+        "UPDATE UserV2 SET email = 'alice@example.com' WHERE id = 1",
+        "SELECT * FROM UserV2 WHERE email = 'alice@example.com'",
+        expectedCount = 1
+      )
     }
 
     "should drop column with empty mapping" in {
-      // Create table with extra column
+      // Create table with extra column and data
       executeSQL("""
         CREATE TABLE User (
           id INTEGER NOT NULL,
@@ -159,17 +224,31 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
           legacy_field VARCHAR(255)
         )
       """)
+      executeSQL("INSERT INTO User (id, name, age, legacy_field) VALUES (1, 'Alice', 30, 'old_value')")
 
       // Migrate - should drop legacy_field
       val report = runZIO(migrator.migrate[User](Some(Map.empty)))
 
+      // Verify report
       report.action mustBe MigrationAction.Altered
       report.changes must contain(ColumnChange.Dropped("legacy_field"))
-      getColumnNames("User") mustBe Set("id", "name", "age")
+
+      // Verify column dropped
+      val columns = getColumnInfo("User")
+      columns.map(_.name).toSet mustBe Set("id", "name", "age")
+      columns.find(_.name == "legacy_field") mustBe None
+
+      // Verify remaining data preserved
+      verifyTableUsable(
+        "User",
+        "SELECT 1",  // No insert needed
+        "SELECT * FROM User WHERE name = 'Alice'",
+        expectedCount = 1
+      )
     }
 
     "should rename column with mapping" in {
-      // Create table with old column name
+      // Create table with old column name and data
       executeSQL("""
         CREATE TABLE UserV3 (
           id INTEGER NOT NULL,
@@ -178,15 +257,30 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
           email VARCHAR(255)
         )
       """)
+      executeSQL("INSERT INTO UserV3 (id, name, age, email) VALUES (1, 'Alice', 30, 'alice@test.com')")
 
       // Migrate with rename mapping
       val report = runZIO(migrator.migrate[UserV3](
         renameMapping = Some(Map("name" -> "fullName"))
       ))
 
+      // Verify report
       report.action mustBe MigrationAction.Altered
       report.changes must contain(ColumnChange.Renamed("name", "fullName"))
-      getColumnNames("UserV3") mustBe Set("id", "fullName", "age", "email")
+
+      // Verify column renamed
+      val columns = getColumnInfo("UserV3")
+      columns.map(_.name).toSet mustBe Set("id", "fullName", "age", "email")
+      columns.find(_.name == "name") mustBe None
+      columns.find(_.name == "fullName") mustBe defined
+
+      // Verify data preserved under new column name
+      verifyTableUsable(
+        "UserV3",
+        "SELECT 1",  // No insert needed
+        "SELECT * FROM UserV3 WHERE fullName = 'Alice'",
+        expectedCount = 1
+      )
     }
 
     "should throw error on ambiguous changes without mapping" in {
@@ -199,12 +293,18 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
           email VARCHAR(255)
         )
       """)
+      val columnsBefore = getColumnInfo("UserV3")
 
       // Migrate without mapping - should fail
       val result = runZIO(migrator.migrate[UserV3]().either)
 
+      // Verify error
       result.isLeft mustBe true
       result.left.get.getMessage must include("Ambiguous")
+
+      // Verify table unchanged after failed migration
+      val columnsAfter = getColumnInfo("UserV3")
+      columnsAfter mustBe columnsBefore
     }
 
     "should preview migration without executing" in {
@@ -216,17 +316,20 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
           age INTEGER NOT NULL
         )
       """)
+      val columnsBefore = getColumnInfo("UserV2")
 
       val preview = runZIO(migrator.preview[UserV2]())
 
+      // Verify preview content
       preview.tableExists mustBe true
       preview.statements.size mustBe 1
-      // jOOQ generates "add" (lowercase) for SQLite dialect
       preview.statements.head.toLowerCase must include("add")
       preview.statements.head.toLowerCase must include("email")
 
-      // Verify table wasn't changed
-      getColumnNames("UserV2") mustBe Set("id", "name", "age")
+      // Verify table structure unchanged (preview should NOT modify)
+      val columnsAfter = getColumnInfo("UserV2")
+      columnsAfter mustBe columnsBefore
+      columnsAfter.map(_.name).toSet mustBe Set("id", "name", "age")
     }
 
     "should check if migration is needed" in {
@@ -245,6 +348,35 @@ class SchemaMigratorSpec extends AnyFreeSpec with Matchers with BeforeAndAfterEa
 
       val needed2 = runZIO(migrator.needsMigration[User])
       needed2 mustBe false
+
+      // Add extra column - should need migration again
+      executeSQL("ALTER TABLE User ADD COLUMN extra VARCHAR(255)")
+      val needed3 = runZIO(migrator.needsMigration[User])
+      needed3 mustBe true
+    }
+
+    "should handle multiple migrations in sequence" in {
+      // Start with no table
+      tableExists("User") mustBe false
+
+      // First migration: create table
+      val report1 = runZIO(migrator.migrate[User]())
+      report1.action mustBe MigrationAction.Created
+      getColumnNames("User") mustBe Set("id", "name", "age")
+
+      // Second migration: no changes
+      val report2 = runZIO(migrator.migrate[User]())
+      report2.action mustBe MigrationAction.NoChanges
+
+      // Manually add column to simulate schema drift
+      executeSQL("ALTER TABLE User ADD COLUMN extra VARCHAR(255)")
+      getColumnNames("User") mustBe Set("id", "name", "age", "extra")
+
+      // Third migration: should drop extra column
+      val report3 = runZIO(migrator.migrate[User](Some(Map.empty)))
+      report3.action mustBe MigrationAction.Altered
+      report3.changes must contain(ColumnChange.Dropped("extra"))
+      getColumnNames("User") mustBe Set("id", "name", "age")
     }
 
     "should generate readable summary" in {
