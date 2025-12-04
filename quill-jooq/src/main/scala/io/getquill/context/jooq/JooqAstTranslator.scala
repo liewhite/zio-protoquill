@@ -1,8 +1,8 @@
 package io.getquill.context.jooq
 
-import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering}
+import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering, Aggregation, AggregationOperator, GroupByMap}
 import io.getquill.NamingStrategy
-import org.jooq.{DSLContext, Record, Field, Condition, Table, SelectSelectStep, SelectJoinStep, SelectConditionStep, ResultQuery, InsertSetStep, InsertSetMoreStep, UpdateSetFirstStep, UpdateSetMoreStep, UpdateConditionStep, DeleteConditionStep, SortField, SelectFieldOrAsterisk}
+import org.jooq.{DSLContext, Record, Field, Condition, Table, SelectSelectStep, SelectJoinStep, SelectConditionStep, ResultQuery, InsertSetStep, InsertSetMoreStep, UpdateSetFirstStep, UpdateSetMoreStep, UpdateConditionStep, DeleteConditionStep, SortField, SelectFieldOrAsterisk, GroupField, AggregateFunction}
 import org.jooq.impl.DSL
 import scala.collection.mutable
 
@@ -123,6 +123,9 @@ object JooqAstTranslator {
             throw new UnsupportedOperationException("Complex distinct queries not yet supported")
         }
 
+      case GroupByMap(query, byAlias, byBody, mapAlias, mapBody) =>
+        translateGroupByMap(query, byAlias, byBody, mapAlias, mapBody, ctx, dslCtx)
+
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported query AST node: ${ast.getClass.getSimpleName}")
     }
@@ -210,8 +213,31 @@ object JooqAstTranslator {
       case BinaryOperation(a, op, b) =>
         translateBinaryField(a, op, b, alias, ctx)
 
+      case Aggregation(op, inner) =>
+        translateAggregation(op, inner, alias, ctx)
+
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported field AST: ${ast.getClass.getSimpleName}")
+    }
+  }
+
+  /**
+   * Translate aggregation function (COUNT, SUM, AVG, MAX, MIN)
+   */
+  def translateAggregation(op: AggregationOperator, inner: Ast, alias: String, ctx: TranslationContext): Field[?] = {
+    val innerField = inner match {
+      // For query[T].map(p => max(p.name)), inner is Map(Entity, alias, Property)
+      case Map(_, _, body) => translateField(body, alias, ctx)
+      // For direct field reference
+      case _ => translateField(inner, alias, ctx)
+    }
+
+    op match {
+      case AggregationOperator.`min` => DSL.min(innerField.asInstanceOf[Field[Comparable[?]]])
+      case AggregationOperator.`max` => DSL.max(innerField.asInstanceOf[Field[Comparable[?]]])
+      case AggregationOperator.`avg` => DSL.avg(innerField.asInstanceOf[Field[Number]])
+      case AggregationOperator.`sum` => DSL.sum(innerField.asInstanceOf[Field[Number]])
+      case AggregationOperator.`size` => DSL.count(innerField)
     }
   }
 
@@ -313,6 +339,46 @@ object JooqAstTranslator {
         case _ => field.asc()
       }
     }
+  }
+
+  /**
+   * Translate GroupByMap (groupByMap in Quill DSL)
+   * query[Person].groupByMap(p => p.id)(p => (p.name, max(p.age)))
+   * => SELECT name, MAX(age) FROM Person GROUP BY id
+   */
+  def translateGroupByMap(
+    query: Ast,
+    byAlias: Ident,
+    byBody: Ast,
+    mapAlias: Ident,
+    mapBody: Ast,
+    ctx: TranslationContext,
+    dslCtx: DSLContext
+  ): ResultQuery[Record] = {
+    // Extract table and optional WHERE condition
+    val (entity, whereCondition) = query match {
+      case e: Entity => (e, None)
+      case Filter(e: Entity, filterAlias, predicate) =>
+        (e, Some(translateCondition(predicate, filterAlias.name, ctx)))
+      case _ =>
+        throw new UnsupportedOperationException("Complex GroupByMap source queries not yet supported")
+    }
+
+    val table = translateEntity(entity, ctx)
+
+    // Translate SELECT fields (mapBody)
+    val selectFields = translateProjection(mapBody, mapAlias.name, ctx)
+
+    // Translate GROUP BY fields (byBody)
+    val groupByFields = byBody match {
+      case Tuple(values) => values.map(v => translateField(v, byAlias.name, ctx).asInstanceOf[GroupField])
+      case _ => Seq(translateField(byBody, byAlias.name, ctx).asInstanceOf[GroupField])
+    }
+
+    // Build query
+    val selectStep = dslCtx.select(selectFields*).from(table)
+    val withWhere = whereCondition.fold(selectStep)(cond => selectStep.where(cond))
+    withWhere.groupBy(groupByFields*)
   }
 
   /**

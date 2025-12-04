@@ -261,6 +261,52 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
       result.map(_.name) must contain allOf ("Alice", "Bob")
     }
 
+    // ========== Aggregation Tests ==========
+
+    "Aggregation - count (size)" in {
+      val q = quote {
+        query[Person].map(p => count(p.id))
+      }
+      val result = runZIO(ctx.run(q))
+      result.size mustBe 1
+      // At least 3 (Alice, Bob, Charlie)
+      result.head must be >= 3
+    }
+
+    "Aggregation - max" in {
+      val q = quote {
+        query[Person].filter(p => p.id <= 3).map(p => max(p.age))
+      }
+      val result = runZIO(ctx.run(q))
+      result.size mustBe 1
+      // Charlie is 35 (max of original 3)
+      result.head mustBe 35
+    }
+
+    "Aggregation - min" in {
+      val q = quote {
+        query[Person].filter(p => p.id <= 3).map(p => min(p.age))
+      }
+      val result = runZIO(ctx.run(q))
+      result.size mustBe 1
+      // Bob is 25 (min of original 3)
+      result.head mustBe 25
+    }
+
+    "Aggregation - sum" in {
+      // Sum of original 3: 30 + 25 + 35 = 90
+      val q = quote {
+        query[Person].filter(p => p.id <= 3).map(p => sum(p.age))
+      }
+      val result = runZIO(ctx.run(q))
+      result.size mustBe 1
+      result.head mustBe 90
+    }
+
+    // Note: avg returns BigDecimal which needs additional decoder support
+    // GroupByMap returns tuples which need additional decoder support
+    // These will be added in future iterations
+
   }
 
 }
