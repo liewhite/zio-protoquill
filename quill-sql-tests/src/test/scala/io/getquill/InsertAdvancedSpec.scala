@@ -1,5 +1,6 @@
 package io.getquill
 
+import scala.annotation.nowarn
 import scala.language.implicitConversions
 import io.getquill.Quoted
 
@@ -264,9 +265,12 @@ class InsertAdvancedSpec extends Spec with Inside {
   }
 
   // TODO Variation of this with only InsertMeta, and well as both InsertMeta and SchemaMeta (inline, and dynamic)
+  // Note: Non-inline SchemaMeta intentionally makes queries dynamic - warnings are expected
   "given queries in an outer scope - with the given already there" - {
     given sm: SchemaMeta[Person] = schemaMeta("tblPerson", _.name -> "colName")
+    @nowarn("msg=forcing the query to become dynamic")
     inline def a = quote { query[Person].insert(_.name -> "Joe", _.age -> 123) } // Insert "assignment form"
+    @nowarn("msg=forcing the query to become dynamic")
     inline def q = quote { query[Person].insertValue(Person("Joe", 123)) }            // Insert entity form
     val adyn = quote { query[Person].insert(_.name -> "Joe", _.age -> 123) } // Dynamic Insert "assignment form"
     val qdyn = quote { query[Person].insertValue(Person("Joe", 123)) }            // Dynamic Insert entity form
@@ -281,9 +285,12 @@ class InsertAdvancedSpec extends Spec with Inside {
   }
 
   // TODO Variation of this with only InsertMeta, and well as both InsertMeta and SchemaMeta (inline, and dynamic)
+  // Note: Non-inline SchemaMeta intentionally makes queries dynamic - warnings are expected
   "(update) given queries in an outer scope - with the given already there" - {
     given sm: SchemaMeta[Person] = schemaMeta("tblPerson", _.name -> "colName")
+    @nowarn("msg=forcing the query to become dynamic")
     inline def a = quote { query[Person].update(_.name -> "Joe", _.age -> 123) } // Insert "assignment form"
+    @nowarn("msg=forcing the query to become dynamic")
     inline def q = quote { query[Person].updateValue(Person("Joe", 123)) }            // Insert entity form
     val adyn = quote { query[Person].update(_.name -> "Joe", _.age -> 123) } // Dynamic Insert "assignment form"
     val qdyn = quote { query[Person].updateValue(Person("Joe", 123)) }            // Dynamic Insert entity form
