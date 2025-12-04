@@ -1,6 +1,6 @@
 package io.getquill.context.jooq
 
-import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, ReturningGenerated, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering, Aggregation, AggregationOperator, GroupByMap, SetContains, ListContains}
+import io.getquill.ast.{Ast, Entity, Filter, Insert, Update, Delete, Map, SortBy, Take, Drop, Distinct, Join, FlatMap, Returning, ReturningGenerated, Property, Ident, Constant, BinaryOperation, UnaryOperation, Tuple, CaseClass, ScalarTag, NullValue, InnerJoin, LeftJoin, RightJoin, FullJoin, Asc, Desc, AscNullsFirst, DescNullsFirst, AscNullsLast, DescNullsLast, TupleOrdering, BooleanOperator, EqualityOperator, NumericOperator, StringOperator, SetOperator, OptionIsDefined, OptionIsEmpty, JoinType, Ordering, Aggregation, AggregationOperator, GroupByMap, SetContains, ListContains, Infix}
 import io.getquill.NamingStrategy
 import org.jooq.{DSLContext, Record, Field, Condition, Table, SelectSelectStep, SelectJoinStep, SelectConditionStep, ResultQuery, InsertSetStep, InsertSetMoreStep, UpdateSetFirstStep, UpdateSetMoreStep, UpdateConditionStep, DeleteConditionStep, SortField, SelectFieldOrAsterisk, GroupField, AggregateFunction}
 import org.jooq.impl.DSL
@@ -293,8 +293,29 @@ object JooqAstTranslator {
       case ListContains(list, element) =>
         translateInCondition(list, element, alias, ctx)
 
+      case Infix(parts, params, _, _, _) =>
+        translateInfixCondition(parts, params, alias, ctx)
+
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported condition AST: ${ast.getClass.getSimpleName}")
+    }
+  }
+
+  /**
+   * Translate Infix expression as condition
+   * Handles LIKE: Infix(List("", " like ", ""), List(field, pattern), ...)
+   */
+  def translateInfixCondition(parts: List[String], params: List[Ast], alias: String, ctx: TranslationContext): Condition = {
+    // Check for LIKE pattern: parts = ["", " like ", ""]
+    if (parts.size == 3 && parts(1).trim.toLowerCase == "like") {
+      val field = translateField(params(0), alias, ctx).asInstanceOf[Field[String]]
+      val pattern = translateField(params(1), alias, ctx).asInstanceOf[Field[String]]
+      field.like(pattern)
+    } else {
+      // Generic infix - build raw SQL condition
+      val translatedParams = params.map(p => translateField(p, alias, ctx))
+      val sql = parts.zip(translatedParams.map(_.toString) :+ "").map { case (part, param) => part + param }.mkString
+      DSL.condition(sql)
     }
   }
 

@@ -399,6 +399,56 @@ class JooqIntegrationSpec extends AnyFreeSpec with Matchers with BeforeAndAfterA
       result.size mustBe 0
     }
 
+    // ========== LIKE Query Tests ==========
+
+    "SELECT - filter with LIKE (prefix match)" in {
+      val q = quote {
+        query[Person].filter(p => p.name.like("A%"))
+      }
+      val result = runZIO(ctx.run(q))
+      result.size mustBe 1
+      result.head.name mustBe "Alice"
+    }
+
+    "SELECT - filter with LIKE (suffix match)" in {
+      val q = quote {
+        query[Person].filter(p => p.name.like("%e"))
+      }
+      val result = runZIO(ctx.run(q))
+      // Alice, Charlie, Grace end with 'e'
+      result.map(_.name) must contain allOf ("Alice", "Charlie")
+    }
+
+    "SELECT - filter with LIKE (contains match)" in {
+      val q = quote {
+        query[Person].filter(p => p.name.like("%li%"))
+      }
+      val result = runZIO(ctx.run(q))
+      // Alice, Charlie contain 'li'
+      result.size mustBe 2
+      result.map(_.name) must contain allOf ("Alice", "Charlie")
+    }
+
+    "SELECT - filter with LIKE using lift" in {
+      val pattern = "%ob%"
+      val q = quote {
+        query[Person].filter(p => p.name.like(lift(pattern)))
+      }
+      val result = runZIO(ctx.run(q))
+      // Bob contains 'ob'
+      result.size mustBe 1
+      result.head.name mustBe "Bob"
+    }
+
+    "SELECT - filter with LIKE combined with other conditions" in {
+      val q = quote {
+        query[Person].filter(p => p.name.like("A%") || p.age > 30)
+      }
+      val result = runZIO(ctx.run(q))
+      // Alice (starts with A), Charlie (age 35), Frank (age 45)
+      result.map(_.name) must contain allOf ("Alice", "Charlie")
+    }
+
   }
 
 }
