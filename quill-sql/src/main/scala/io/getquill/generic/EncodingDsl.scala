@@ -6,6 +6,7 @@ import scala.deriving._
 import scala.compiletime.{erasedValue, summonFrom}
 import io.getquill.MappedEncoding
 import io.getquill.generic.DecodingType
+import scala.annotation.nowarn
 
 /**
  * Note that much of the implementation of anyValEncoder/anyValDecoder is a workaround for:
@@ -31,19 +32,22 @@ import io.getquill.generic.DecodingType
  */
 trait LowPriorityImplicits { self: EncodingDsl =>
 
+  // 低频使用，关闭警告
+  @nowarn
   implicit inline def anyValEncoder[Cls <: AnyVal]: Encoder[Cls] =
     MappedEncoderMaker[Encoder, Cls].apply(
       new AnyValEncoderContext[Encoder, Cls] {
         override def makeMappedEncoder[Base](mapped: MappedEncoding[Cls, Base], encoder: Encoder[Base]): Encoder[Cls] =
-          self.mappedEncoder(mapped, encoder)
+          self.mappedEncoder(using mapped, encoder)
       }
     )
-
+  // 低频使用，关闭警告
+  @nowarn
   implicit inline def anyValDecoder[Cls <: AnyVal]: Decoder[Cls] =
     MappedDecoderMaker[Decoder, Cls].apply(
       new AnyValDecoderContext[Decoder, Cls] {
         override def makeMappedDecoder[Base](mapped: MappedEncoding[Base, Cls], decoder: Decoder[Base]): Decoder[Cls] =
-          self.mappedDecoder(mapped, decoder)
+          self.mappedDecoder(using mapped, decoder)
       }
     )
 }
