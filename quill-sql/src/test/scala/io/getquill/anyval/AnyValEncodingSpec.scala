@@ -1,6 +1,7 @@
 package io.getquill.anyval
 
 import io.getquill._
+import io.getquill.context.ExecutionType
 
 case class Blah(value: String, value2: Int)
 case class Rec(value: Blah, otherValue: String)
@@ -10,12 +11,21 @@ class AnyValEncodingSpec extends Spec {
 
   val ctx = new MirrorContext(MirrorSqlDialect, Literal)
   import ctx._
+
   case class Person(name: Name, age: Int)
 
+  implicit val encodeName: MappedEncoding[Name, String] = MappedEncoding[Name, String](_.value)
+  implicit val decodeName: MappedEncoding[String, Name] = MappedEncoding[String, Name](Name(_))
+
   "simple anyval should encode and decode" in {
-    // val id = Rec(Blah("Joe", 123), "Bloggs")
     val name = Name("Joe")
     val mirror = ctx.run(query[Person].filter(p => p.name == lift(name)))
-    println(mirror)
+    mirror.triple mustEqual (
+      (
+        "SELECT p.name, p.age FROM Person p WHERE p.name = ?",
+        List("Joe"),
+        ExecutionType.Static
+      )
+    )
   }
 }
