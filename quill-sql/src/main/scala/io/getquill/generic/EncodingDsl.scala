@@ -31,23 +31,21 @@ import io.getquill.generic.DecodingType
  */
 trait LowPriorityImplicits { self: EncodingDsl =>
 
-  // Named class to avoid anonymous class duplication at inline sites
-  private class AnyValEncoderContextImpl[Cls] extends AnyValEncoderContext[Encoder, Cls] {
-    override def makeMappedEncoder[Base](mapped: MappedEncoding[Cls, Base], encoder: Encoder[Base]): Encoder[Cls] =
-      self.mappedEncoder(using mapped, encoder)
-  }
-
-  // Named class to avoid anonymous class duplication at inline sites
-  private class AnyValDecoderContextImpl[Cls] extends AnyValDecoderContext[Decoder, Cls] {
-    override def makeMappedDecoder[Base](mapped: MappedEncoding[Base, Cls], decoder: Decoder[Base]): Decoder[Cls] =
-      self.mappedDecoder(using mapped, decoder)
-  }
-
   implicit inline def anyValEncoder[Cls <: AnyVal]: Encoder[Cls] =
-    MappedEncoderMaker[Encoder, Cls].apply(new AnyValEncoderContextImpl[Cls])
+    MappedEncoderMaker[Encoder, Cls].apply(
+      new AnyValEncoderContext[Encoder, Cls] {
+        override def makeMappedEncoder[Base](mapped: MappedEncoding[Cls, Base], encoder: Encoder[Base]): Encoder[Cls] =
+          self.mappedEncoder(mapped, encoder)
+      }
+    )
 
   implicit inline def anyValDecoder[Cls <: AnyVal]: Decoder[Cls] =
-    MappedDecoderMaker[Decoder, Cls].apply(new AnyValDecoderContextImpl[Cls])
+    MappedDecoderMaker[Decoder, Cls].apply(
+      new AnyValDecoderContext[Decoder, Cls] {
+        override def makeMappedDecoder[Base](mapped: MappedEncoding[Base, Cls], decoder: Decoder[Base]): Decoder[Cls] =
+          self.mappedDecoder(mapped, decoder)
+      }
+    )
 }
 
 // Generic null checker does not need to access the session but it needs to be typed on it for the context

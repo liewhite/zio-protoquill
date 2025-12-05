@@ -14,8 +14,8 @@ class AnyValEncodingSpec extends Spec {
 
   case class Person(name: Name, age: Int)
 
-  implicit val encodeName: MappedEncoding[Name, String] = MappedEncoding[Name, String](_.value)
-  implicit val decodeName: MappedEncoding[String, Name] = MappedEncoding[String, Name](Name(_))
+  // AnyVal types are automatically handled by anyValEncoder/anyValDecoder
+  // No explicit MappedEncoding needed
 
   "simple anyval should encode and decode" in {
     val name = Name("Joe")
