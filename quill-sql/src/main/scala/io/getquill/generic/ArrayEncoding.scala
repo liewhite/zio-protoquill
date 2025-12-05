@@ -48,7 +48,7 @@ trait ArrayEncoding extends EncodingDsl {
       mapped: MappedEncoding[I, O],
       e: Encoder[Seq[O]]
   ): Encoder[Col[I]] = {
-    mappedEncoder[Col[I], Seq[O]](MappedEncoding((col: Col[I]) => col.map(mapped.f)), e)
+    mappedEncoder[Col[I], Seq[O]](using MappedEncoding((col: Col[I]) => col.map(mapped.f)), e)
   }
 
   implicit def arrayMappedDecoder[I, O, Col[X] <: Seq[X]](
@@ -58,7 +58,7 @@ trait ArrayEncoding extends EncodingDsl {
       bf: Factory[O, Col[O]]
   ): Decoder[Col[O]] = {
     mappedDecoder[Seq[I], Col[O]](
-      MappedEncoding((col: Seq[I]) =>
+      using MappedEncoding((col: Seq[I]) =>
         col.foldLeft(bf.newBuilder)((b, x) => b += mapped.f(x)).result
       ),
       d

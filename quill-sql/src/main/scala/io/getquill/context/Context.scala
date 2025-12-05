@@ -76,7 +76,7 @@ trait Context[+Dialect <: Idiom, +Naming <: NamingStrategy]
   inline def lift[T](inline runtimeValue: T): T =
     ${ LiftMacro[T, PrepareRow, Session]('runtimeValue) } // Needs PrepareRow in order to be able to summon encoders
 
-  inline def liftQuery[U[_] <: Iterable[_], T](inline runtimeValue: U[T]): Query[T] =
+  inline def liftQuery[U[_] <: Iterable[?], T](inline runtimeValue: U[T]): Query[T] =
     ${ LiftQueryMacro[T, U, PrepareRow, Session]('runtimeValue) }
 
   // Originally insertValue/updateValue for EntityQuery[Query[T]]/Quoted[EntityQuery[Query[T]]] lived in

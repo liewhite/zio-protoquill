@@ -39,7 +39,7 @@ object SummonDecoderMacro {
       case None =>
         Expr.summon[GenericDecoder[ResultRow, Session, T, DecodingType.Generic]] match {
           case Some(decoder) => decoder
-          case None          => report.throwError(s"Cannot Find decoder for ${Type.show[T]}")
+          case None          => report.errorAndAbort(s"Cannot Find decoder for ${Type.show[T]}")
         }
     }
   }

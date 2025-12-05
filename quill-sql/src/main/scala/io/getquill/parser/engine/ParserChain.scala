@@ -33,16 +33,16 @@ object ParserChain {
     protected def build(rootParse: Parser): Parser =
       new Parser(rootParse) {
         def attempt = {
-          val leftOrRightMatch: PartialFunction[Expr[_], Option[Ast]] =
-            PartialFunction.fromFunction[Expr[_], Option[Ast]](expr => {
+          val leftOrRightMatch: PartialFunction[Expr[?], Option[Ast]] =
+            PartialFunction.fromFunction[Expr[?], Option[Ast]](expr => {
               val leftParser = left.build(rootParse)
               val rightParser = right.build(rootParse)
               val history = summon[History]
               val leftHistory = History.Matched(left, history)(Format.Expr(expr))
               // if the left side parser did not match, that means that it was ignored so add that info to the history
               val rightHistory = History.Matched(right, History.Ignored(left, history)(Format.Expr(expr)))(Format.Expr(expr))
-              val leftLift: Expr[_] => Option[Ast] = leftParser.attemptProper(using leftHistory).lift
-              val rightLift: Expr[_] => Option[Ast] = rightParser.attemptProper(using rightHistory).lift
+              val leftLift: Expr[?] => Option[Ast] = leftParser.attemptProper(using leftHistory).lift
+              val rightLift: Expr[?] => Option[Ast] = rightParser.attemptProper(using rightHistory).lift
               leftLift(expr).orElse(rightLift(expr))
             })
           leftOrRightMatch.unlift

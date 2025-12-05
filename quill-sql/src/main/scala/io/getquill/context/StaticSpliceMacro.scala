@@ -116,7 +116,7 @@ object StaticSpliceMacro {
         case SelectPath(pathRoot, selectPath) => (pathRoot, selectPath)
         case other                            =>
           // TODO Long explanatory message about how it has to some value inside object foo inside object bar... and it needs to be a thing compiled in a previous compilation unit
-          report.throwError(s"Could not load a static value `${Format.Term(value)}` from ${Printer.TreeStructure.show(other)}")
+          report.errorAndAbort(s"Could not load a static value `${Format.Term(value)}` from ${Printer.TreeStructure.show(other)}")
       }
 
     val (ownerTpe, path) =
@@ -127,17 +127,17 @@ object StaticSpliceMacro {
         case term @ DefTerm(TermOwnerIsModule(owner)) =>
           (owner, pathRoot.symbol.name +: selectPath)
         case _ =>
-          report.throwError(s"Cannot evaluate the static path ${Format.Term(value)}. Neither it's type ${Format.TypeRepr(pathRoot.tpe)} nor the owner of this type is a static module.")
+          report.errorAndAbort(s"Cannot evaluate the static path ${Format.Term(value)}. Neither it's type ${Format.TypeRepr(pathRoot.tpe)} nor the owner of this type is a static module.")
       }
 
     val module = Load.Module.fromTypeRepr(ownerTpe).toEither.discardLeft(e =>
       // TODO Long explanatory message about how it has to some value inside object foo inside object bar... and it needs to be a thing compiled in a previous compilation unit
-      report.throwError(s"Could not look up {${(ownerTpe)}}.${path.mkString(".")} from the object.\nStatic load failed due to: ${e.stackTraceToString}")
+      report.errorAndAbort(s"Could not look up {${(ownerTpe)}}.${path.mkString(".")} from the object.\nStatic load failed due to: ${e.stackTraceToString}")
     )
 
     val splicedValue =
       ReflectivePathChainLookup(module, path).discardLeft(msg =>
-        report.throwError(s"Could not look up {${(ownerTpe)}}.${path.mkString(".")}. Failed because:\n${msg}")
+        report.errorAndAbort(s"Could not look up {${(ownerTpe)}}.${path.mkString(".")}. Failed because:\n${msg}")
       )
 
     val quat = Lifter.quat(QuatMaking.ofType[T])
@@ -154,7 +154,7 @@ object StaticSpliceMacro {
 
     val spliceStr =
       spliceEither match {
-        case Left(msg)    => report.throwError(msg, valueRaw)
+        case Left(msg)    => report.errorAndAbort(msg, valueRaw)
         case Right(value) => value
       }
 

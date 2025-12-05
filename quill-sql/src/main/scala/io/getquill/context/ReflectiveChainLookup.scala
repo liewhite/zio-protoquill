@@ -11,14 +11,14 @@ import scala.util.Either
 import io.getquill.util.Format
 
 private[getquill] object ReflectivePathChainLookup {
-  sealed trait LookupElement { def cls: Class[_]; def current: Object }
+  sealed trait LookupElement { def cls: Class[?]; def current: Object }
   object LookupElement {
     // For a module class the lookup-object is actualy a class. For example
     // for: object Foo { object Bar { ... } } you would do:
     //   val submod: Class[Bar] = Class[Foo].getDeclaredClasses.find(_.name endsWith "Bar$")
     //   submod.getField("MODULE$").get(submod /*Object is passed into here*/)
     //   (note that the Class[---] things are typed above but in reality when dealing with them in the reflection they won't be)
-    case class ModuleClass(cls: Class[_]) extends LookupElement { val current: Object = cls }
+    case class ModuleClass(cls: Class[?]) extends LookupElement { val current: Object = cls }
     // For a regular value reference, we can simply lookup the class from the object
     case class Value(current: Object) extends LookupElement { val cls = current.getClass }
   } // end LookupElement
@@ -29,7 +29,7 @@ private[getquill] object ReflectivePathChainLookup {
   }
 
   extension (elem: Option[Object]) {
-    def nullCheck(path: String, cls: Class[_], lookupType: String) =
+    def nullCheck(path: String, cls: Class[?], lookupType: String) =
       elem match {
         case Some(null) =>
           // Runtime warning - value exists but is null
@@ -92,15 +92,15 @@ private[getquill] object ReflectivePathChainLookup {
     }
 
     // Lookup object Foo { ... } element MODULE$ which is the singleton instance in the Java representation
-    def lookupModuleObject(obj: Object)(cls: Class[_] = obj.getClass): Option[Object] =
+    def lookupModuleObject(obj: Object)(cls: Class[?] = obj.getClass): Option[Object] =
       cls.getFields.find(_.getName == "MODULE$").map(m => Try(m.get(obj)).toOption).flatten
 
-    def lookupFirstMethod(path: String)(cls: Class[_], instance: Object)(label: String) = {
+    def lookupFirstMethod(path: String)(cls: Class[?], instance: Object)(label: String) = {
       val methodOpt = cls.getMethods.find(m => m.getName == path && m.getParameterCount == 0)
       methodOpt.map(m => Try(m.invoke(instance)).toOption).flatten.nullCheck(path, cls, label)
     }
 
-    def lookupFirstField(path: String)(cls: Class[_], instance: Object)(label: String) = {
+    def lookupFirstField(path: String)(cls: Class[?], instance: Object)(label: String) = {
       val fieldOpt = cls.getFields.find(_.getName == path)
       fieldOpt.map(f => Try(f.get(instance)).toOption).flatten.nullCheck(path, cls, label)
     }

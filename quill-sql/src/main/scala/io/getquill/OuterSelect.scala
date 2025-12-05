@@ -38,7 +38,7 @@ object OuterSelectWrap {
     import quotes.reflect._
     e match {
       case Expr(expr) => expr
-      case _ => report.throwError(
+      case _ => report.errorAndAbort(
           s"""
         |Cannot unlift OuterSelectWrap from the value: ${Format.Expr(e)}.
         |The OuterSelectWrap parameter needs to be used as a constant for example:

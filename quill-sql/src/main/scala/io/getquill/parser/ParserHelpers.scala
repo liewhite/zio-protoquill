@@ -47,7 +47,7 @@ object ParserHelpers {
 
     object AssignmentTerm {
       object Components {
-        def unapply(expr: Expr[_])(using Quotes) =
+        def unapply(expr: Expr[?])(using Quotes) =
           UntypeExpr(expr) match {
             case Lambda1(ident, identTpe, ArrowFunction(prop, value)) => Some((ident, identTpe, prop, value))
             case _                                                    => None
@@ -55,7 +55,7 @@ object ParserHelpers {
       }
 
       object TwoComponents {
-        def unapply(expr: Expr[_])(using Quotes) =
+        def unapply(expr: Expr[?])(using Quotes) =
           UntypeExpr(expr) match {
             case Lambda2(ident1, identTpe1, ident2, identTpe2, ArrowFunction(prop, value)) => Some((ident1, identTpe1, ident2, identTpe2, prop, value))
             case _                                                                         => None
@@ -71,7 +71,7 @@ object ParserHelpers {
           // then check if one can fit into another. If it can the assignment is valid
           if (isNumericPrimitive(propTpe) && isNumericPrimitive(valueTpe)) {
             if (!(numericPrimitiveFitsInto(propTpe, valueTpe))) {
-              report.throwError(
+              report.errorAndAbort(
                 s"The primitive numeric value ${Format.TypeRepr(valueTpe)} in ${Format.Expr(value)} is to large to fit into the ${Format.TypeRepr(propTpe)} in ${Format.Expr(prop)}.",
                 parent
               )
@@ -79,27 +79,27 @@ object ParserHelpers {
           }
           // Otherwise check if the property is a subtype of the value that is being assigned to it
           else if (!(valueTpe <:< propTpe)) {
-            report.throwError(
+            report.errorAndAbort(
               s"The ${Format.TypeRepr(valueTpe)} value ${Format.Expr(value)} cannot be assigned to the ${Format.TypeRepr(propTpe)} property ${Format.Expr(prop)} because they are not the same type (or a subtype).",
               parent
             )
           }
         }
-        def apply(expr: Expr[_])(using Quotes) = {
+        def apply(expr: Expr[?])(using Quotes) = {
           import quotes.reflect._
           expr match {
             case Components(_, _, prop, value)          => checkPropAndValue(expr, prop, value)
             case TwoComponents(_, _, _, _, prop, value) => checkPropAndValue(expr, prop, value)
             case other =>
-              report.throwError(s"The assignment statement ${Format.Expr(expr)} is invalid.")
+              report.errorAndAbort(s"The assignment statement ${Format.Expr(expr)} is invalid.")
           }
         }
       } // end CheckTypes
 
-      def OrFail(expr: Expr[_])(using Quotes, History) =
+      def OrFail(expr: Expr[?])(using Quotes, History) =
         unapply(expr).getOrElse { failParse(expr, classOf[Assignment]) }
 
-      def unapply(expr: Expr[_])(using Quotes, History): Option[Assignment] =
+      def unapply(expr: Expr[?])(using Quotes, History): Option[Assignment] =
         UntypeExpr(expr) match {
           case Components(ident, identTpe, prop, value) =>
             Some(Assignment(cleanIdent(ident, identTpe), rootParse(prop), rootParse(value)))
@@ -107,9 +107,9 @@ object ParserHelpers {
         }
 
       object Double {
-        def OrFail(expr: Expr[_])(using Quotes, History) =
+        def OrFail(expr: Expr[?])(using Quotes, History) =
           unapply(expr).getOrElse { failParse(expr, classOf[AssignmentDual]) }
-        def unapply(expr: Expr[_])(using Quotes, History): Option[AssignmentDual] =
+        def unapply(expr: Expr[?])(using Quotes, History): Option[AssignmentDual] =
           UntypeExpr(expr) match {
             case TwoComponents(ident1, identTpe1, ident2, identTpe2, prop, value) =>
               val i1 = cleanIdent(ident1, identTpe1)
@@ -135,15 +135,15 @@ object ParserHelpers {
     // Parses (e:Entity) => e.foo (or e.foo.bar etc...)
     object LambdaToProperty {
       object OrFail {
-        def apply(expr: Expr[_])(using History): Property =
+        def apply(expr: Expr[?])(using History): Property =
           unapply(expr) match {
             case Some(value) => value
             case None =>
-              report.throwError(s"Could not parse a (x) => x.property expression from: ${Format.Expr(expr)}", expr)
+              report.errorAndAbort(s"Could not parse a (x) => x.property expression from: ${Format.Expr(expr)}", expr)
           }
       }
 
-      def unapply(expr: Expr[_])(using History): Option[Property] =
+      def unapply(expr: Expr[?])(using History): Option[Property] =
         expr match {
           case Lambda1(id, tpe, body) =>
             val bodyProperty = AnyProperty.OrFail(body)
@@ -155,15 +155,15 @@ object ParserHelpers {
 
     object AnyProperty {
       object OrFail {
-        def apply(expr: Expr[_])(using History): Property =
+        def apply(expr: Expr[?])(using History): Property =
           unapply(expr) match {
             case Some(value) => value
             case None =>
-              report.throwError(s"Could not parse a ast.Property from the expression: ${Format.Expr(expr)}", expr)
+              report.errorAndAbort(s"Could not parse a ast.Property from the expression: ${Format.Expr(expr)}", expr)
           }
       }
 
-      def unapply(expr: Expr[_])(using History): Option[Property] =
+      def unapply(expr: Expr[?])(using History): Option[Property] =
         expr match {
           case Unseal(value @ Select(Seal(prefix), member)) =>
             val propertyAst = Property(rootParse(prefix), member)
@@ -209,7 +209,7 @@ object ParserHelpers {
       def unapply[T: Type](expr: Expr[Any]): Option[PropertyAlias] =
         expr match {
           case Lambda1(_, _, '{ ($prop: Any).->[v](${ ConstExpr(alias: String) }) }) =>
-            def path(tree: Expr[_]): List[String] =
+            def path(tree: Expr[?]): List[String] =
               tree match {
                 case a `.` b =>
                   path(a) :+ b
@@ -262,7 +262,7 @@ object ParserHelpers {
         case (lop, rop, _) =>
           val lopString = (if (lop) "Optional" else "Non-Optional") + s" ${left}}"
           val ropString = (if (rop) "Optional" else "Non-Optional") + s" ${right}}"
-          report.throwError(s"Cannot compare ${lopString} with ${ropString} using operator ${equalityBehavior.operator}", left.asExpr)
+          report.errorAndAbort(s"Cannot compare ${lopString} with ${ropString} using operator ${equalityBehavior.operator}", left.asExpr)
       }
     }
 
@@ -322,19 +322,19 @@ object ParserHelpers {
           (leftIsOptional, rightIsOptional)
         case _ =>
           if (leftIsOptional || rightIsOptional)
-            report.throwError(
+            report.errorAndAbort(
               s"${Format.TypeReprW(leftType)} == ${Format.TypeReprW(rightType)} is not allowed since ${Format.TypeReprW(leftInner)}, ${Format.TypeReprW(rightInner)} are different types.",
               lhs.asExpr
             )
           else
-            report.throwError(s"${Format.TypeReprW(leftType)} == ${Format.TypeReprW(rightType)} is not allowed since they are different types.", lhs.asExpr)
+            report.errorAndAbort(s"${Format.TypeReprW(leftType)} == ${Format.TypeReprW(rightType)} is not allowed since they are different types.", lhs.asExpr)
       }
 
     } // end checkInnerTypes
 
     def isOptionType(using Quotes)(tpe: quotes.reflect.TypeRepr) = {
       import quotes.reflect.{Ident => TIdent, ValDef => TValDef, _}
-      tpe <:< TypeRepr.of[Option[_]]
+      tpe <:< TypeRepr.of[Option[?]]
     }
 
     /**
@@ -351,7 +351,7 @@ object ParserHelpers {
 
     def innerOptionParam(using Quotes)(tpe: quotes.reflect.TypeRepr): quotes.reflect.TypeRepr = {
       import quotes.reflect.{Ident => TIdent, ValDef => TValDef, _}
-      if (tpe <:< TypeRepr.of[Option[_]])
+      if (tpe <:< TypeRepr.of[Option[?]])
         tpe.asType match {
           case '[Option[t]] => TypeRepr.of[t]
         }
@@ -388,7 +388,7 @@ object ParserHelpers {
             val body =
               rhsOpt match {
                 // TODO Better site-description in error
-                case None      => report.throwError(s"Cannot parse 'val' clause with no '= rhs' (i.e. equals and right hand side) of ${Printer.TreeStructure.show(tree)}")
+                case None      => report.errorAndAbort(s"Cannot parse 'val' clause with no '= rhs' (i.e. equals and right hand side) of ${Printer.TreeStructure.show(tree)}")
                 case Some(rhs) => rhs
               }
             val bodyAst = rootParse(body.asExpr)
@@ -398,7 +398,7 @@ object ParserHelpers {
             val body =
               rhsOpt match {
                 // TODO Better site-description in error
-                case None      => report.throwError(s"Cannot parse 'val' clause with no '= rhs' (i.e. equals and right hand side) of ${Printer.TreeStructure.show(tree)}")
+                case None      => report.errorAndAbort(s"Cannot parse 'val' clause with no '= rhs' (i.e. equals and right hand side) of ${Printer.TreeStructure.show(tree)}")
                 case Some(rhs) => rhs
               }
             val bodyAst = rootParse(body.asExpr)
@@ -506,7 +506,7 @@ object ParserHelpers {
                 case Some(expr) => s" in the expression: ${Format.Tree(expr)}"
                 case None       => ""
               }
-            report.throwError(s"Invalid Pattern Matching Term: ${Format.Tree(other)}${addition}.\n" +
+            report.errorAndAbort(s"Invalid Pattern Matching Term: ${Format.Tree(other)}${addition}.\n" +
               s"Quill Query Pattern matches must be correctly matching tuples.\n" +
               s"For example for query[Person].map(p => (p.name, p.age)) you can then do:\n" +
               s"query[Person].map(p => (p.name, p.age)).map { case (name, age) => ... }")
@@ -549,7 +549,7 @@ object ParserHelpers {
       term.tpe.termSymbol.flags.is(Flags.Final | Flags.Implicit | Flags.Method)
     }
 
-    def unapply(expr: Expr[_])(using Quotes) = {
+    def unapply(expr: Expr[?])(using Quotes) = {
       import quotes.reflect._
       expr match {
         // Putting a type-apply in all possible places to detect all possible variations of the
@@ -560,7 +560,7 @@ object ParserHelpers {
           None
       }
     }
-    def errorMessage(using Quotes)(expr: Expr[_], ccid: quotes.reflect.TypeRepr, constructorArg: quotes.reflect.Term) =
+    def errorMessage(using Quotes)(expr: Expr[?], ccid: quotes.reflect.TypeRepr, constructorArg: quotes.reflect.Term) =
       s"""|Error in the expression:
           |  ${Format.Expr(expr)}
           |

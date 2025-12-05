@@ -110,7 +110,7 @@ class ZioJooqContext[+N <: NamingStrategy](
   inline def lift[T](inline runtimeValue: T): T =
     ${ LiftMacro[T, PrepareRow, Session]('runtimeValue) }
 
-  inline def liftQuery[U[_] <: Iterable[_], T](inline runtimeValue: U[T]): QuillQuery[T] =
+  inline def liftQuery[U[_] <: Iterable[?], T](inline runtimeValue: U[T]): QuillQuery[T] =
     ${ LiftQueryMacro[T, U, PrepareRow, Session]('runtimeValue) }
 
   // ========== Internal helpers ==========

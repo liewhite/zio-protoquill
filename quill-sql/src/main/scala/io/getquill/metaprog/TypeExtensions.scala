@@ -10,7 +10,7 @@ import scala.quoted._
 
 object TypeExtensions {
 
-  extension (tpe: Type[_])(using Quotes) {
+  extension (tpe: Type[?])(using Quotes) {
 
     def constValue: String = {
       import quotes.reflect._

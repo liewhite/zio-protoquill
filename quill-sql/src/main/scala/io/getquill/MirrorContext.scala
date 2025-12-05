@@ -22,7 +22,7 @@ trait MirrorContextBase[+Dialect <: Idiom, +Naming <: NamingStrategy]
   override type PrepareRow = Row
   override type ResultRow = Row
   override type RunActionResult = ActionMirror
-  override type RunActionReturningResult[T] = ActionReturningMirror[_, T]
+  override type RunActionReturningResult[T] = ActionReturningMirror[?, T]
   override type RunBatchActionReturningResult[T] = BatchActionReturningMirror[T]
   override type RunBatchActionResult = BatchActionMirror
   override type Session = MirrorSession

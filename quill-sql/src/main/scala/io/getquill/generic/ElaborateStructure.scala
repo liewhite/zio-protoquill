@@ -135,13 +135,13 @@ object ElaborateStructure {
 
       // Terms must both have the same name
       if (this.name != other.name)
-        report.throwError(s"Cannot resolve coproducts because terms ${this} and ${other} have different names") // TODO Describe this as better error messages for users?
+        report.errorAndAbort(s"Cannot resolve coproducts because terms ${this} and ${other} have different names") // TODO Describe this as better error messages for users?
 
       if (this.optional != other.optional)
-        report.throwError(s"Cannot resolve coproducts because one of the terms ${this} and ${other} is optional and the other is not")
+        report.errorAndAbort(s"Cannot resolve coproducts because one of the terms ${this} and ${other} is optional and the other is not")
 
       if (this.typeType != other.typeType)
-        report.throwError(s"Cannot resolve coproducts because the terms ${this} and ${other} have different types (${this.typeType} and ${other.typeType} respectively)")
+        report.errorAndAbort(s"Cannot resolve coproducts because the terms ${this} and ${other} have different types (${this.typeType} and ${other.typeType} respectively)")
 
       import io.getquill.util.GroupByOps._
       // Given Shape -> (Square, Rectangle) the result will be:
@@ -155,7 +155,7 @@ object ElaborateStructure {
         orderedGroupBy.map((term, values) => {
           val distinctValues = values.distinct
           if (distinctValues.length > 1)
-            report.throwError(s"Invalid coproduct at: ${TypeRepr.of[T].widen.typeSymbol.name}.${term} detected multiple kinds of values: ${distinctValues}")
+            report.errorAndAbort(s"Invalid coproduct at: ${TypeRepr.of[T].widen.typeSymbol.name}.${term} detected multiple kinds of values: ${distinctValues}")
 
           // TODO Check if there are zero?
           distinctValues.head
@@ -282,7 +282,7 @@ object ElaborateStructure {
       case ('[field *: fields], '[tpe *: types]) if Type.of[tpe].isProduct =>
         base[tpe](node, side) :: collectFields(node, Type.of[fields], Type.of[types], side)
       case (_, '[EmptyTuple]) => Nil
-      case _                  => report.throwError("Cannot Derive Sum during Type Flattening of Expression:\n" + (fieldsTup, typesTup))
+      case _                  => report.errorAndAbort("Cannot Derive Sum during Type Flattening of Expression:\n" + (fieldsTup, typesTup))
     }
   }
 
@@ -333,7 +333,7 @@ object ElaborateStructure {
 
       case (_, '[EmptyTuple]) => accum.reverse
 
-      case _ => report.throwError("Cannot Derive Product during Type Flattening of Expression:\n" + (fieldsTup, typesTup))
+      case _ => report.errorAndAbort("Cannot Derive Product during Type Flattening of Expression:\n" + (fieldsTup, typesTup))
     }
   }
 
@@ -385,10 +385,10 @@ object ElaborateStructure {
           }
         case ElaborationSide.Encoding =>
           // println(s"------- ALREDY EXISTS Encoder for ${Format.TypeOf[T]}")
-          Expr.summon[GenericEncoder[T, _, _]].isDefined
+          Expr.summon[GenericEncoder[T, ?, ?]].isDefined
         case ElaborationSide.Decoding =>
           // println(s"------- ALREDY EXISTS Decoder for ${Format.TypeOf[T]}")
-          Expr.summon[GenericDecoder[_, _, T, DecodingType.Specific]].isDefined
+          Expr.summon[GenericDecoder[?, ?, T, DecodingType.Specific]].isDefined
       }
 
     // TODO Back here. Should have a input arg that asks whether elaboration is
@@ -420,12 +420,12 @@ object ElaborateStructure {
               // You would get Term(width, height, radius)
               alternatives.reduce((termA, termB) => termA.merge[T](termB))
             case _ =>
-              report.throwError(
+              report.errorAndAbort(
                 s"Althought a mirror of the type ${Format.TypeOf[T]} can be summoned. It is not a sum-type, a product-type, or a ${encDecText} entity so its fields cannot be understood in the structure-elaborator. Its mirror is ${Format.Expr(ev)}"
               )
           }
         case None =>
-          report.throwError(s"A mirror of the type ${Format.TypeOf[T]} cannot be summoned. It is not a sum-type, a product-type, or a ${encDecText} entity so its fields cannot be understood in the structure-elaborator.")
+          report.errorAndAbort(s"A mirror of the type ${Format.TypeOf[T]} cannot be summoned. It is not a sum-type, a product-type, or a ${encDecText} entity so its fields cannot be understood in the structure-elaborator.")
       }
   }
 
@@ -505,13 +505,13 @@ object ElaborateStructure {
   def decomposedProductValueDetails[T: Type](side: ElaborationSide, udtBehavior: UdtBehavior)(using Quotes) = {
     import quotes.reflect._
 
-    def innerType(tpe: Type[_]) =
+    def innerType(tpe: Type[?]) =
       tpe match {
         case '[Option[t]] => Type.of[t]
         case _            => tpe
       }
 
-    def isOptional(tpe: Type[_]) =
+    def isOptional(tpe: Type[?]) =
       tpe match {
         case '[Option[t]] => true
         case _            => false
@@ -520,7 +520,7 @@ object ElaborateStructure {
     def summonElaboration[T: Type] = {
       val elaboration = ElaborateStructure.Term.ofProduct[T](side, udtBehavior = udtBehavior)
       if (elaboration.typeType == Leaf)
-        report.throwError(s"Error encoding UDT: ${Format.TypeOf[T]}. Elaboration detected no fields (i.e. was a leaf-type). This should not be possible.")
+        report.errorAndAbort(s"Error encoding UDT: ${Format.TypeOf[T]}. Elaboration detected no fields (i.e. was a leaf-type). This should not be possible.")
       elaboration
     }
 
@@ -549,7 +549,7 @@ object ElaborateStructure {
     // for t:T := Person(name: Name, age: Int), Name(first:String, last: String) it will be paths := List[Expr](t.name.first, t.name.last, t.age) (labels: List(namefirst, namelast, age))
     val labels = elaboration.paths
     val pathLambdas = DeconstructElaboratedEntityLevels[T](elaboration)
-    val paths: List[Expr[_]] = pathLambdas.map { (exprPath, exprType) =>
+    val paths: List[Expr[?]] = pathLambdas.map { (exprPath, exprType) =>
       exprType match {
         case '[t] =>
           if (TypeRepr.of[t] =:= TypeRepr.of[Any]) {
@@ -562,7 +562,7 @@ object ElaborateStructure {
       }
     }
     if (labels.length != pathLambdas.length)
-      report.throwError(s"List of (${labels.length}) labels: ${labels} does not match list of (${paths.length}) paths that they represent: ${paths.map(Format.Expr(_))}")
+      report.errorAndAbort(s"List of (${labels.length}) labels: ${labels} does not match list of (${paths.length}) paths that they represent: ${paths.map(Format.Expr(_))}")
     val outputs = labels.zip(paths)
     outputs.foreach { (label, exprPath) =>
       if (exprPath.asTerm.tpe =:= TypeRepr.of[Any])
@@ -571,7 +571,7 @@ object ElaborateStructure {
     outputs
   }
 
-  private[getquill] def decomposedLiftsOfProductValue[T: Type](elaboration: Term)(using Quotes): List[(Expr[T] => Expr[_], Type[_])] =
+  private[getquill] def decomposedLiftsOfProductValue[T: Type](elaboration: Term)(using Quotes): List[(Expr[T] => Expr[?], Type[?])] =
     DeconstructElaboratedEntityLevels[T](elaboration)
 
   /**
@@ -601,7 +601,7 @@ object ElaborateStructure {
           val children = list.map(child => toAstRec(child, notTopLevel(parentTerms :+ name)))
           (name, OptionSome(CaseClass(Extractors.typeName[T], children)))
         case _ =>
-          quotes.reflect.report.throwError(s"Illegal generic schema: $node from type ${Type.of[T]}")
+          quotes.reflect.report.errorAndAbort(s"Illegal generic schema: $node from type ${Type.of[T]}")
       }
     }
     toAstRec(node, Chunk.empty, true)
@@ -611,7 +611,7 @@ object ElaborateStructure {
     def getOrThrow(msg: String) = opt.getOrElse { throw new IllegalArgumentException(msg) }
   }
 
-  case class TaggedLiftedCaseClass[A <: Ast](caseClass: A, lifts: List[(String, Expr[_])]) {
+  case class TaggedLiftedCaseClass[A <: Ast](caseClass: A, lifts: List[(String, Expr[?])]) {
     import java.util.UUID
     def uuid() = UUID.randomUUID.toString
 

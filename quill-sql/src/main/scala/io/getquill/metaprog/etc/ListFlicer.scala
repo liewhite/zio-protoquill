@@ -11,7 +11,7 @@ object ListFlicer {
     val indexValue = index match { case Expr(i: Int) => i }
     val exprs = UntypeExpr(list.asTerm.underlyingArgument.asExpr) match {
       case '{ scala.List.apply[T](${ Varargs(args) }*) } => args
-      case _                                                => report.throwError("Does not match: " + Printer.TreeStructure.show(list.asTerm))
+      case _                                                => report.errorAndAbort("Does not match: " + Printer.TreeStructure.show(list.asTerm))
     }
     exprs.apply(indexValue)
   }

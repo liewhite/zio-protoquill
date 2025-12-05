@@ -75,7 +75,7 @@ object QueryExecutionBatchDynamic {
       Session,
       D <: Idiom,
       N <: NamingStrategy,
-      Ctx <: Context[_, _],
+      Ctx <: Context[?, ?],
       Res
   ](
       quotedRaw: Quoted[BatchAction[A]],
@@ -145,7 +145,7 @@ object QueryExecutionBatchDynamic {
         Some(foreachIdent.name)
       )
 
-    val sortedLifts = sortedLiftsRaw.asInstanceOf[List[InjectableEagerPlanter[_, _, _]]]
+    val sortedLifts = sortedLiftsRaw.asInstanceOf[List[InjectableEagerPlanter[?, ?, ?]]]
 
     def expandLiftQueryMembers(filteredPerRowLifts: List[Planter[?, ?, ?]], entities: Iterable[?]) =
       entities.map { entity =>

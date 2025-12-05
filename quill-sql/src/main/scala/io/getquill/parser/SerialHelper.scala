@@ -27,7 +27,7 @@ object SerialHelper {
         val serialized = SerialHelper.Ast.toSerialized(value)
         '{ SerialHelper.Ast.fromSerialized(${ quoted.Expr(serialized) }).asInstanceOf[T] }
       }
-      def unapply(expr: quoted.Expr[_])(using Quotes, TType[T]) = {
+      def unapply(expr: quoted.Expr[?])(using Quotes, TType[T]) = {
         import quotes.reflect._
         expr match {
           case '{ SerialHelper.Ast.fromSerialized(${ quoted.Expr(serialized) }).asInstanceOf[t] } =>
@@ -48,7 +48,7 @@ object SerialHelper {
         val serialized = SerialHelper.Quat.toSerialized(value)
         '{ SerialHelper.Quat.fromSerialized(${ quoted.Expr(serialized) }).asInstanceOf[T] }
       }
-      def unapply(expr: quoted.Expr[_])(using Quotes, TType[T]) = {
+      def unapply(expr: quoted.Expr[?])(using Quotes, TType[T]) = {
         import quotes.reflect._
         expr match {
           case '{ SerialHelper.Quat.fromSerialized(${ quoted.Expr(serialized) }).asInstanceOf[t] } =>
@@ -69,7 +69,7 @@ object SerialHelper {
         val serialized = SerialHelper.QuatProduct.toSerialized(value)
         '{ SerialHelper.QuatProduct.fromSerialized(${ quoted.Expr(serialized) }).asInstanceOf[T] }
       }
-      def unapply(expr: quoted.Expr[_])(using Quotes, TType[T]) = {
+      def unapply(expr: quoted.Expr[?])(using Quotes, TType[T]) = {
         import quotes.reflect._
         expr match {
           case '{ SerialHelper.QuatProduct.fromSerialized(${ quoted.Expr(serialized) }).asInstanceOf[t] } =>
@@ -84,7 +84,7 @@ object SerialHelper {
   object BehaviorEnabled {
     def unapply(value: Expr[DoSerialize])(using Quotes): Boolean = {
       import quotes.reflect._
-      val memberSymbol = value.asTerm.tpe.termSymbol.memberType("BehaviorType")
+      val memberSymbol = value.asTerm.tpe.termSymbol.typeMember("BehaviorType")
       value.asTerm.select(memberSymbol).tpe <:< TypeRepr.of[io.getquill.parser.SerializationBehavior.SkipSerialize]
     }
   }

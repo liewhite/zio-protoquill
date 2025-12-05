@@ -33,7 +33,7 @@ object QueryMacro {
           case QuotationLotExpr(Pointable(_)) =>
             UnquoteMacro('{ $meta.entity })
 
-          case _ => report.throwError("Invalid Quotation:\n" + meta.show, meta)
+          case _ => report.errorAndAbort("Invalid Quotation:\n" + meta.show, meta)
         }
 
       case None =>

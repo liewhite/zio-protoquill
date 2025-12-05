@@ -60,13 +60,13 @@ object DynamicQuery {
 
 sealed class DynamicQuery[+T](val q: Quoted[Query[T]]) {
 
-  private def splice[R](ast: Ast, otherLifts: List[Planter[_, _, _]], otherRuntimeQuotes: List[QuotationVase]) =
+  private def splice[R](ast: Ast, otherLifts: List[Planter[?, ?, ?]], otherRuntimeQuotes: List[QuotationVase]) =
     Quoted[R](ast, otherLifts ++ q.lifts, otherRuntimeQuotes ++ q.runtimeQuotes)
 
-  protected[this] def transform[U, V, R](
+  protected def transform[U, V, R](
       f: Quoted[U] => Quoted[V],
       t: (Ast, Ident, Ast) => Ast,
-      r: (Ast, List[Planter[_, _, _]], List[QuotationVase]) => R = dyn _
+      r: (Ast, List[Planter[?, ?, ?]], List[QuotationVase]) => R = dyn
   ) =
     withFreshIdent { v =>
       val sp = splice(v, Nil, Nil)
@@ -74,12 +74,12 @@ sealed class DynamicQuery[+T](val q: Quoted[Query[T]]) {
       r(t(q.ast, v, q2.ast), q.lifts ++ q2.lifts, q.runtimeQuotes ++ q2.runtimeQuotes)
     }(Quat.Generic)
 
-  protected[this] def transformOpt[O, R, TT >: T, D <: DynamicQuery[TT]](
+  protected def transformOpt[O, R, TT >: T, D <: DynamicQuery[TT]](
       opt: Option[O],
       f: (Quoted[TT], Quoted[O]) => Quoted[R],
       t: (Quoted[TT] => Quoted[R]) => D,
       thiz: D
-  )(implicit enc: GenericEncoder[O, _, _]) =
+  )(implicit enc: GenericEncoder[O, ?, ?]) =
     opt match {
       case Some(o) =>
         val q2 = spliceLift(o, q.lifts, q.runtimeQuotes)
@@ -102,7 +102,7 @@ sealed class DynamicQuery[+T](val q: Quoted[Query[T]]) {
 
   def filterOpt[O](opt: Option[O])(
       f: (Quoted[T], Quoted[O]) => Quoted[Boolean]
-  )(implicit enc: GenericEncoder[O, _, _]): DynamicQuery[T] =
+  )(implicit enc: GenericEncoder[O, ?, ?]): DynamicQuery[T] =
     transformOpt(opt, f, filter, this)
 
   def filterIf(
@@ -124,7 +124,7 @@ sealed class DynamicQuery[+T](val q: Quoted[Query[T]]) {
   def take(n: Quoted[Int]): DynamicQuery[T] =
     dyn(Take(q.ast, n.ast), q.lifts ++ n.lifts, q.runtimeQuotes ++ n.runtimeQuotes)
 
-  def take(n: Int)(implicit enc: GenericEncoder[Int, _, _]): DynamicQuery[T] = {
+  def take(n: Int)(implicit enc: GenericEncoder[Int, ?, ?]): DynamicQuery[T] = {
     val uid = UUID.randomUUID().toString
     val out =
       DynamicQuery[T](
@@ -137,7 +137,7 @@ sealed class DynamicQuery[+T](val q: Quoted[Query[T]]) {
     out
   }
 
-  def takeOpt(opt: Option[Int])(implicit enc: GenericEncoder[Int, _, _]): DynamicQuery[T] =
+  def takeOpt(opt: Option[Int])(implicit enc: GenericEncoder[Int, ?, ?]): DynamicQuery[T] =
     opt match {
       case Some(o) => take(o)
       case None    => this
@@ -146,10 +146,10 @@ sealed class DynamicQuery[+T](val q: Quoted[Query[T]]) {
   def drop(n: Quoted[Int]): DynamicQuery[T] =
     dyn(Drop(q.ast, n.ast), q.lifts ++ n.lifts, q.runtimeQuotes ++ n.runtimeQuotes)
 
-  def drop(n: Int)(implicit enc: GenericEncoder[Int, _, _]): DynamicQuery[T] =
+  def drop(n: Int)(implicit enc: GenericEncoder[Int, ?, ?]): DynamicQuery[T] =
     drop(spliceLift(n, q.lifts, q.runtimeQuotes))
 
-  def dropOpt(opt: Option[Int])(implicit enc: GenericEncoder[Int, _, _]): DynamicQuery[T] =
+  def dropOpt(opt: Option[Int])(implicit enc: GenericEncoder[Int, ?, ?]): DynamicQuery[T] =
     opt match {
       case Some(o) => drop(o)
       case None    => this
@@ -203,7 +203,7 @@ sealed class DynamicQuery[+T](val q: Quoted[Query[T]]) {
   ): DynamicJoinQuery[A, B, (Option[A], Option[B])] =
     DynamicJoinQuery(FullJoin, q, q2)
 
-  private[this] def flatJoin[R](
+  private def flatJoin[R](
       tpe: JoinType,
       on: Quoted[T] => Quoted[Boolean]
   ): DynamicQuery[R] =
@@ -231,7 +231,7 @@ sealed class DynamicQuery[+T](val q: Quoted[Query[T]]) {
   def isEmpty: Quoted[Boolean] =
     splice(UnaryOperation(SetOperator.isEmpty, q.ast), Nil, Nil)
 
-  def contains[B >: T](value: B)(implicit enc: GenericEncoder[B, _, _]): Quoted[Boolean] =
+  def contains[B >: T](value: B)(implicit enc: GenericEncoder[B, ?, ?]): Quoted[Boolean] =
     contains(spliceLift(value, q.lifts, q.runtimeQuotes))
 
   def contains[B >: T](value: Quoted[B]): Quoted[Boolean] =
@@ -269,7 +269,7 @@ case class DynamicJoinQuery[A, B, R](
 
 case class DynamicEntityQuery[T](override val q: Quoted[EntityQuery[T]]) extends DynamicQuery[T](q) {
 
-  private[this] def dyn[R](ast: Ast, lifts: List[Planter[_, _, _]], runtimeQuotes: List[QuotationVase]) =
+  private def dyn[R](ast: Ast, lifts: List[Planter[?, ?, ?]], runtimeQuotes: List[QuotationVase]) =
     DynamicEntityQuery(Quoted[EntityQuery[R]](ast, q.lifts ++ lifts, q.runtimeQuotes ++ runtimeQuotes))
 
   override def filter(
@@ -284,7 +284,7 @@ case class DynamicEntityQuery[T](override val q: Quoted[EntityQuery[T]]) extends
 
   override def filterOpt[O](opt: Option[O])(
       f: (Quoted[T], Quoted[O]) => Quoted[Boolean]
-  )(implicit enc: GenericEncoder[O, _, _]): DynamicEntityQuery[T] =
+  )(implicit enc: GenericEncoder[O, ?, ?]): DynamicEntityQuery[T] =
     transformOpt(opt, f, filter, this)
 
   override def map[R](f: Quoted[T] => Quoted[R]): DynamicEntityQuery[R] =
@@ -298,8 +298,8 @@ case class DynamicEntityQuery[T](override val q: Quoted[EntityQuery[T]]) extends
 
   type DynamicAssignment[U] = ((Quoted[T] => Quoted[U]), U)
 
-  private[this] def propsValuesAndQuotes[S](
-      l: List[DynamicSet[S, _]]
+  private def propsValuesAndQuotes[S](
+      l: List[DynamicSet[S, ?]]
   ) =
     l.collect {
       case s: DynamicSetValue[_, _] =>
@@ -310,7 +310,7 @@ case class DynamicEntityQuery[T](override val q: Quoted[EntityQuery[T]]) extends
         (setPropertyQuote, setValueQuote, Assignment(v, setPropertyQuote.ast, setValueQuote.ast))
     }
 
-  def insert(l: DynamicSet[T, _]*): DynamicInsert[T] = {
+  def insert(l: DynamicSet[T, ?]*): DynamicInsert[T] = {
     val outputs = propsValuesAndQuotes(l.toList)
     val assignemnts = outputs.map(_._3)
     val lifts = (outputs.map(_._1.lifts).flatten ++ outputs.map(_._2.lifts).flatten).distinct
@@ -320,7 +320,7 @@ case class DynamicEntityQuery[T](override val q: Quoted[EntityQuery[T]]) extends
     )
   }
 
-  def update(sets: DynamicSet[T, _]*): DynamicUpdate[T] = {
+  def update(sets: DynamicSet[T, ?]*): DynamicUpdate[T] = {
     val outputs = propsValuesAndQuotes(sets.toList)
     val assignemnts = outputs.map(_._3)
     val lifts = (outputs.map(_._1.lifts).flatten ++ outputs.map(_._2.lifts).flatten).distinct
@@ -341,13 +341,13 @@ case class DynamicEntityQuery[T](override val q: Quoted[EntityQuery[T]]) extends
 }
 
 object DynamicAction {
-  def apply[A <: DslAction[_]](p: Quoted[A]) =
+  def apply[A <: DslAction[?]](p: Quoted[A]) =
     new DynamicAction[A] {
       override val q = p
     }
 }
 
-sealed trait DynamicAction[A <: DslAction[_]] {
+sealed trait DynamicAction[A <: DslAction[?]] {
   protected[getquill] def q: Quoted[A]
 
   override def toString = q.toString

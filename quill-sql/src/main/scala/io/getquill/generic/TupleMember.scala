@@ -12,7 +12,7 @@ object TupleMember {
     val matchMember =
       matchMemberExpr match {
         case Expr(str) => str
-        case _         => report.throwError("Not a static string")
+        case _         => report.errorAndAbort("Not a static string")
       }
 
     sealed trait ElaboratedField
@@ -30,9 +30,9 @@ object TupleMember {
     } // end ElaboratedField
 
     val clsType = TypeRepr.of[T]
-    // val memberSymbol = clsType.widen.classSymbol.get.memberField("_1")
-    // val memberSymbol = clsType.widen.typeSymbol.memberField("_1")
-    // val memberSymbol = clsType.typeSymbol.memberField("_1")
+    // val memberSymbol = clsType.widen.classSymbol.get.fieldMember("_1")
+    // val memberSymbol = clsType.widen.typeSymbol.fieldMember("_1")
+    // val memberSymbol = clsType.typeSymbol.fieldMember("_1")
     // val memberSymbol = clsType.typeSymbol.fieldMember("_1")
     val elab = ElaboratedField(clsType, matchMember)
     // Debug info commented out to avoid compile-time noise

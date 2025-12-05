@@ -15,7 +15,7 @@ object GroupByOps {
   import collection.immutable.ListSet
   import collection.mutable.{LinkedHashMap, Builder}
 
-  implicit class GroupByOrderedImplicitImpl[A](val t: Traversable[A]) extends AnyVal {
+  implicit class GroupByOrderedImplicitImpl[A](val t: Iterable[A]) extends AnyVal {
     def groupByOrderedUnique[K](f: A => K): Map[K, ListSet[A]] =
       groupByGen(ListSet.newBuilder[A])(f)
 
@@ -36,7 +36,7 @@ object GroupByOps {
         builder += i
       }
       // Don't need to keep the original map, just map the values in place
-      map.mapValues(_.result).toMap // TODO Need to convert this to LinkedHashMap for ordering guarentees?
+      map.view.mapValues(_.result).toMap // TODO Need to convert this to LinkedHashMap for ordering guarentees?
     }
   }
 }

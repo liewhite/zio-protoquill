@@ -5,17 +5,17 @@ import io.getquill.util.Format
 
 object failParse {
   enum ThrowInfo {
-    case AstClass(astClass: Class[_])
+    case AstClass(astClass: Class[?])
     case Message(msg: String)
   }
 
-  def apply(expr: Expr[_], astClass: Class[_])(using Quotes): Nothing =
+  def apply(expr: Expr[?], astClass: Class[?])(using Quotes): Nothing =
     apply(expr, ThrowInfo.AstClass(astClass))
 
-  def apply(expr: Expr[_], msg: String)(using Quotes): Nothing =
+  def apply(expr: Expr[?], msg: String)(using Quotes): Nothing =
     apply(expr, ThrowInfo.Message(msg))
 
-  def apply(expr: Expr[_], throwInfo: ThrowInfo)(using Quotes): Nothing = {
+  def apply(expr: Expr[?], throwInfo: ThrowInfo)(using Quotes): Nothing = {
     import quotes.reflect._
     // When errors are printed, make sure to deserialize parts of the AST that may be serialized,
     // otherwise in the expression printout there will garbled base46 characters everywhere
@@ -27,7 +27,7 @@ object failParse {
       }
 
     val traces = Thread.currentThread.getStackTrace.take(50).map("  " + _.toString).mkString("\n")
-    report.throwError(
+    report.errorAndAbort(
       s"""|
       |s"==== ${message} ====
       |  ${Format(Printer.TreeShortCode.show(term)) /* Or Maybe just expr? */}

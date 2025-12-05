@@ -25,7 +25,7 @@ object Unlifter {
       // println(s"==================== Unlifting: ${Format.Expr(ast)} =================}")
       ast match {
         case Is[Ast](ast) => unliftAst.attempt(ast)
-        case other        => report.throwError(s"Cannot unlift ${Format.Expr(ast)} to a ast because it's type is: ${Format.TypeRepr(ast.asTerm.tpe)}")
+        case other        => report.errorAndAbort(s"Cannot unlift ${Format.Expr(ast)} to a ast because it's type is: ${Format.TypeRepr(ast.asTerm.tpe)}")
       }
     }
   }
@@ -36,7 +36,7 @@ object Unlifter {
       // println(s"==================== Unlifting: ${Format.Expr(ast)} =================}")
       ast match {
         case Is[CaseClass](ast) => unliftCaseClass.attempt(ast)
-        case other              => report.throwError(s"Cannot unlift ${Format.Expr(ast)} to a CaseClass because it's type is: ${Format.TypeRepr(ast.asTerm.tpe)}")
+        case other              => report.errorAndAbort(s"Cannot unlift ${Format.Expr(ast)} to a CaseClass because it's type is: ${Format.TypeRepr(ast.asTerm.tpe)}")
       }
     }
   }
@@ -44,7 +44,7 @@ object Unlifter {
   def apply(ast: Expr[Ast]): Quotes ?=> Ast = unliftAst.apply(ast) // can also do ast.lift but this makes some error messages simpler
 
   extension [T](t: Expr[T])(using FromExpr[T], Quotes) {
-    def unexpr: T = t.valueOrError
+    def unexpr: T = t.valueOrAbort
   }
 
   trait NiceUnliftable[T: ClassTag] extends FromExpr[T] { // : ClassTag
@@ -68,7 +68,7 @@ object Unlifter {
       import quotes.reflect._
       attempt(expr)
         .getOrElse {
-          report.throwError(
+          report.errorAndAbort(
             s"Could not Unlift AST type ${classTag[T].runtimeClass.getSimpleName} from the element:\n" +
               s"${section(Format.Expr.Detail(expr))}\n" +
               s"of the Quill Abstract Syntax Tree",
@@ -397,7 +397,7 @@ object Unlifter {
   }
 
   extension [T](expr: Seq[Expr[T]])(using FromExpr[T], Quotes) {
-    def unexprSeq = expr.map(_.valueOrError)
+    def unexprSeq = expr.map(_.valueOrAbort)
   }
 
   given quatProductUnliftable: NiceUnliftable[Quat.Product] with {

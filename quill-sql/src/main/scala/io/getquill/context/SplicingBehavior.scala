@@ -18,7 +18,7 @@ object HasDynamicSplicingHint {
   object InExpr {
     def unapply(value: Expr[SplicingBehaviorHint])(using Quotes): Boolean = {
       import quotes.reflect._
-      val memberSymbol = value.asTerm.tpe.termSymbol.memberType("BehaviorType")
+      val memberSymbol = value.asTerm.tpe.termSymbol.typeMember("BehaviorType")
       value.asTerm.select(memberSymbol).tpe <:< TypeRepr.of[SplicingBehavior.FailOnDynamic]
     }
   }

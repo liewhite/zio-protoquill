@@ -36,7 +36,7 @@ object StringOrNull {
  */
 class MapFlicerMacro {
 
-  def isProduct(using Quotes)(tpe: Type[_]): Boolean = {
+  def isProduct(using Quotes)(tpe: Type[?]): Boolean = {
     import quotes.reflect._
     TypeRepr.of(using tpe) <:< TypeRepr.of[Product]
   }
@@ -44,7 +44,7 @@ class MapFlicerMacro {
   private def buildClause[T: Type, PrepareRow: Type, Session: Type](core: Expr[T])(map: Expr[Map[String, Any]])(using Quotes): Expr[Boolean] = {
     import quotes.reflect._
     ElaborateStructure.decomposedProductValueDetails[T](ElaborationSide.Encoding, UdtBehavior.Leaf) match {
-      case (terms, Leaf) => report.throwError("Not supported yet", core)
+      case (terms, Leaf) => report.errorAndAbort("Not supported yet", core)
       case (terms, Branch) =>
         val boolTerms =
           terms.map { (fieldString, isOptional, getter, tpe) =>

@@ -119,7 +119,7 @@ object Extractors {
   }
 
   object SelectApplyN {
-    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[_], String, List[Expr[_]])] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[?], String, List[Expr[?]])] = {
       import quotes.reflect._
       SelectApplyN.Term.unapply(term.asTerm).map((sub, method, obj) => (sub.asExpr, method, obj.map(_.asExpr)))
     }
@@ -155,7 +155,7 @@ object Extractors {
   }
 
   object SelectApply1 {
-    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[_], String, Expr[_])] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[?], String, Expr[?])] = {
       import quotes.reflect._
       term match {
         case Unseal(Applys(Select(body, method), List(arg))) => Some((body.asExpr, method, arg.asExpr))
@@ -167,16 +167,16 @@ object Extractors {
   // Designed to be a more generic version the Varargs which does not handle all cases.
   // Particularily when a varargs parameter is passed from one inline function into another.
   object GenericSeq {
-    def unapply(using Quotes)(term: Expr[?]): Option[List[Expr[_]]] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[List[Expr[?]]] = {
       import quotes.reflect._
-      term match {
+      (term: @unchecked) match {
         case Varargs(props)                     => Some(props.toList)
         case '{ List(${ Varargs(props) }) }     => Some(props.toList)
         case '{ Nil }                           => Some(List())
         case '{ Seq(${ Varargs(props) }) }      => Some(props.toList)
         case Unseal(Untype(Repeated(props, _))) => Some(props.map(_.asExpr))
         case other =>
-          report.throwError("Could not parse sequence expression:\n" + Format.Term(term.asTerm))
+          report.errorAndAbort("Could not parse sequence expression:\n" + Format.Term(term.asTerm))
       }
     }
   }
@@ -187,7 +187,7 @@ object Extractors {
   // '{ ((blah: BlahType): BlahType) } ). If there are no type ascriptions, just return the term.
   // The unapply allows it to be done inside of a matcher.
   object UntypeExpr {
-    def unapply(using Quotes)(expr: Expr[?]): Option[Expr[_]] = {
+    def unapply(using Quotes)(expr: Expr[?]): Option[Expr[?]] = {
       import quotes.reflect._
       Untype.unapply(expr.asTerm).map(_.asExpr)
     }
@@ -254,7 +254,7 @@ object Extractors {
   }
 
   object SelectExpr {
-    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[_], String)] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[?], String)] = {
       import quotes.reflect._
       term match {
         case Unseal(Select(Seal(prefix), memberName)) => Some((prefix, memberName))
@@ -264,7 +264,7 @@ object Extractors {
   }
 
   object `.` {
-    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[_], String)] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[?], String)] = {
       import quotes.reflect._
       term match {
         case Unseal(Select(Seal(prefix), memberName)) => Some((prefix, memberName))
@@ -279,7 +279,7 @@ object Extractors {
       val tpe = expr.asTerm.tpe
       val cls = tpe.widen.typeSymbol
       if (!cls.flags.is(Flags.Case))
-        report.throwError(
+        report.errorAndAbort(
           s"The class ${Format.TypeRepr(expr.asTerm.tpe)} (symbol: ${cls}) is not a case class in the expression: ${Format.Expr(expr)}\n" +
             s"Therefore you cannot lookup the property `${property}` on it!"
         )
@@ -288,7 +288,7 @@ object Extractors {
           cls.caseFields
             .find(sym => sym.name == property)
             .getOrElse {
-              report.throwError(s"Cannot find property '${property}' of (${expr.show}:${cls.name}) fields are: ${cls.caseFields.map(_.name)}", expr)
+              report.errorAndAbort(s"Cannot find property '${property}' of (${expr.show}:${cls.name}) fields are: ${cls.caseFields.map(_.name)}", expr)
             }
 
         '{ (${ Select(expr.asTerm, method).asExpr }) }
@@ -297,7 +297,7 @@ object Extractors {
   }
 
   object SelectExprOpt {
-    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[Option[_]], String)] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[Option[?]], String)] = {
       import quotes.reflect._
       term match {
         case Unseal(Select(prefix, memberName)) => Some((prefix.asExprOf[Option[Any]], memberName))
@@ -307,7 +307,7 @@ object Extractors {
   }
 
   object Lambda1 {
-    def unapply(using Quotes)(expr: Expr[?]): Option[(String, quotes.reflect.TypeRepr, quoted.Expr[_])] = {
+    def unapply(using Quotes)(expr: Expr[?]): Option[(String, quotes.reflect.TypeRepr, quoted.Expr[?])] = {
       import quotes.reflect._
       Lambda1.Term.unapply(expr.asTerm).map((str, tpe, expr) => (str, tpe, expr.asExpr))
     }
@@ -326,7 +326,7 @@ object Extractors {
   }
 
   object Lambda2 {
-    def unapply(using Quotes)(expr: Expr[?]): Option[(String, quotes.reflect.TypeRepr, String, quotes.reflect.TypeRepr, quoted.Expr[_])] = {
+    def unapply(using Quotes)(expr: Expr[?]): Option[(String, quotes.reflect.TypeRepr, String, quotes.reflect.TypeRepr, quoted.Expr[?])] = {
       import quotes.reflect._
       unapplyTerm(expr.asTerm).map((str1, tpe1, str2, tpe2, expr) => (str1, tpe1, str2, tpe2, expr.asExpr))
     }
@@ -359,7 +359,7 @@ object Extractors {
   }
 
   object LambdaN {
-    def unapply(using Quotes)(term: Expr[?]): Option[(List[(String, quotes.reflect.TypeRepr)], quoted.Expr[_])] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(List[(String, quotes.reflect.TypeRepr)], quoted.Expr[?])] = {
       import quotes.reflect._
       RawLambdaN.unapply(term.asTerm).map((strAndTpe, term) => (strAndTpe, term.asExpr))
     }
@@ -391,7 +391,7 @@ object Extractors {
   }
 
   object ArrowFunction {
-    def unapply(expr: Expr[_])(using Quotes) = {
+    def unapply(expr: Expr[?])(using Quotes) = {
       import quotes.reflect._
       expr match {
         case '{ type v; ($prop: Any).->[`v`](($value: `v`)) } => Some((prop, value))
@@ -483,7 +483,7 @@ object Extractors {
     // def Any(v: Any): Expr[Any] =
     //   v match
     //     case cv: String | Char | Int | Long | Boolean | Float | Double | Byte => apply(cv)
-    // case _ => report.throwError(s"Cannot lift constant value: ${v}, it is not one of the allowed constant types: String | Int | Long | Boolean | Float | Double | Byte")
+    // case _ => report.errorAndAbort(s"Cannot lift constant value: ${v}, it is not one of the allowed constant types: String | Int | Long | Boolean | Float | Double | Byte")
 
     def apply[T <: ConstantValue.Kind](using Quotes)(const: T): Expr[T] =
       const match {
@@ -644,7 +644,7 @@ object Extractors {
           // println("Is Module: " + ((tpe.classSymbol.get.flags & Flags.Artifact) == Flags.Artifact))
           // println("Is Module2: " + (tpe.classSymbol.get.flags.is(Flags.Artifact)))
           // println("Flags: " + (tpe.classSymbol.get.flags.show))
-          // report.throwError("**************** STOP HERE ****************")
+          // report.errorAndAbort("**************** STOP HERE ****************")
 
           // When constructing a case class with a macro we sometimes get this (e.g using ConstructType)
           case ClassSymbolAndUnseal(sym, Apply(Select(New(Inferred()), "<init>"), args)) if isType[Product](expr) =>
@@ -725,16 +725,16 @@ object Extractors {
   }
 
   object `Option[...[t]...]` {
-    def innerOrTopLevelT(tpe: Type[_])(using Quotes): Type[_] =
+    def innerOrTopLevelT(tpe: Type[?])(using Quotes): Type[?] =
       tpe match {
         case '[Option[t]] => innerOrTopLevelT(Type.of[t])
         case '[t]         => Type.of[t]
       }
-    def innerT(tpe: Type[_])(using Quotes) = {
+    def innerT(tpe: Type[?])(using Quotes) = {
       import quotes.reflect._
       tpe match {
         case '[Option[t]] => innerOrTopLevelT(Type.of[t])
-        case '[t]         => report.throwError(s"The Type ${Format.TypeOf[t]} is not an Option")
+        case '[t]         => report.errorAndAbort(s"The Type ${Format.TypeOf[t]} is not an Option")
       }
     }
   }

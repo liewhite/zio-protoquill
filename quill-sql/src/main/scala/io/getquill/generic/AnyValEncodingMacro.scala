@@ -34,7 +34,7 @@ object MappedDecoderMaker {
     val constructor = tpe.typeSymbol.primaryConstructor
     // TODO Better error describing why the encoder could not be syntheisized if the constructor doesn't exist or has wrong form (i.e. != 1 arg)
     val firstParam = tpe.typeSymbol.primaryConstructor.paramSymss(0)(0)
-    val firstParamField = tpe.typeSymbol.memberField(firstParam.name)
+    val firstParamField = tpe.typeSymbol.fieldMember(firstParam.name)
     val firstParamType = tpe.memberType(firstParamField)
 
     // println(s"========== First Param Type ${Format.TypeRepr(firstParamType)} of: ${Format.TypeRepr(tpe)} =========")
@@ -59,7 +59,7 @@ object MappedDecoderMaker {
             // println(s"========== RETURNING Encoder ${Format.TypeRepr(tpe)} => ${Format.TypeRepr(firstParamType)} Consisting of: ${Format.Expr(out)} =========")
             out
           case None =>
-            report.throwError(
+            report.errorAndAbort(
               s"Cannot find a regular encoder for the AnyVal type ${Format.TypeRepr(tpe)} or a mapped-encoder for it's base type: ${Format.TypeRepr(firstParamType)}"
             )
         }
@@ -93,9 +93,9 @@ object MappedEncoderMaker {
         case List(List(first)) =>
           first
         case _ =>
-          report.throwError(s"not matched: ${Format.TypeRepr(tpe.dealias)}")
+          report.errorAndAbort(s"not matched: ${Format.TypeRepr(tpe.dealias)}")
       }
-    val firstParamField = tpe.typeSymbol.memberField(firstParam.name)
+    val firstParamField = tpe.typeSymbol.fieldMember(firstParam.name)
     val firstParamType = tpe.memberType(firstParamField)
 
     // Try to summon an encoder from the first param type
@@ -108,7 +108,7 @@ object MappedEncoderMaker {
             // println(s"========== RETURNING Encoder ${Format.TypeRepr(tpe)} => ${Format.TypeRepr(firstParamType)} Consisting of: ${Format.Expr(out)} =========")
             out
           case None =>
-            report.throwError(
+            report.errorAndAbort(
               s"Cannot find a regular encoder for the AnyVal type ${Format.TypeRepr(tpe)} or a mapped-encoder for it's base type: ${Format.TypeRepr(firstParamType)}"
             )
         }
@@ -124,7 +124,7 @@ object AnyValToValMacro {
     import qctx.reflect._
     val tpe = TypeRepr.of[Cls]
     val firstParam = tpe.typeSymbol.primaryConstructor.paramSymss(0)(0)
-    val firstParamField = tpe.typeSymbol.memberField(firstParam.name)
+    val firstParamField = tpe.typeSymbol.fieldMember(firstParam.name)
     val firstParamType = tpe.memberType(firstParamField)
     // println("Member type of 1st param: " + io.getquill.util.Format.TypeRepr(firstParamType))
     '{ MappedEncoding((v: Cls) => ${ Select('v.asTerm, firstParamField).asExprOf[V] }) }

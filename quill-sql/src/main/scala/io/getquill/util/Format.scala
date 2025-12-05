@@ -57,7 +57,7 @@ object Format {
   }
 
   object Type {
-    def apply(tpe: scala.quoted.Type[_])(using Quotes) = {
+    def apply(tpe: scala.quoted.Type[?])(using Quotes) = {
       import quotes.reflect._
       tpe match {
         case '[tt] => Printer.TypeReprShortCode.show(quotes.reflect.TypeRepr.of[tt])
@@ -70,7 +70,7 @@ object Format {
     import io.getquill.metaprog.{QuotationLotExpr, Uprootable, Pluckable, Pointable}
     import io.getquill.parser.Unlifter
 
-    def apply(expr: Expr[Quoted[_]])(using Quotes) =
+    def apply(expr: Expr[Quoted[?]])(using Quotes) =
       expr match {
         case QuotationLotExpr(quotationLot) =>
           quotationLot match {
@@ -86,13 +86,13 @@ object Format {
   }
 
   object Expr {
-    def apply(expr: Expr[_], showErrorTrace: Boolean = false)(using Quotes) = {
+    def apply(expr: Expr[?], showErrorTrace: Boolean = false)(using Quotes) = {
       import quotes.reflect._
       val deserExpr = DeserializeAstInstances(expr)
       Format(Printer.TreeShortCode.show(deserExpr.asTerm), showErrorTrace)
     }
 
-    def Detail(expr: Expr[_])(using Quotes) = {
+    def Detail(expr: Expr[?])(using Quotes) = {
       import quotes.reflect._
       val term = expr.asTerm
       if (ProtoMessages.errorDetail) {

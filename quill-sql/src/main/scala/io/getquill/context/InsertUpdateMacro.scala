@@ -96,7 +96,7 @@ object InsertUpdateMacro {
     }
 
   object DynamicUtil {
-    def retrieveAssignmentTuple(quoted: Quoted[_]): Set[Ast] =
+    def retrieveAssignmentTuple(quoted: Quoted[?]): Set[Ast] =
       quoted.ast match {
         case Tuple(values) if (values.forall(_.isInstanceOf[Property])) => values.toSet
         case other                                                      => throw new IllegalArgumentException(s"Invalid values in InsertMeta: ${other}. An InsertMeta AST must be a tuple of Property elements.")
@@ -172,7 +172,7 @@ object InsertUpdateMacro {
                   )
                 EntitySummonState.Dynamic(uid, quotation)
               case _ =>
-                report.throwError(s"Quotation Lot of Insert/UpdateMeta must be either pluckable or uprootable from: '${unquotation}'")
+                report.errorAndAbort(s"Quotation Lot of Insert/UpdateMeta must be either pluckable or uprootable from: '${unquotation}'")
             }
 
           // Case where it's not just an EntityQuery that is in the front of the update/insertValue e.g. a filter
@@ -214,7 +214,7 @@ object InsertUpdateMacro {
               EntitySummonState.Static(ast, rawLifts)
 
           case _ =>
-            report.throwError(s"Cannot process illegal insert meta: ${Format.Expr(schema)}")
+            report.errorAndAbort(s"Cannot process illegal insert meta: ${Format.Expr(schema)}")
         }
       }
     } // end InserteeSchema
@@ -231,7 +231,7 @@ object InsertUpdateMacro {
         else if (TypeRepr.of[A] <:< TypeRepr.of[Update])
           MacroType.Update
         else
-          report.throwError(s"Invalid macro action type ${io.getquill.util.Format.TypeOf[A[Any]]} must be either Insert or Update")
+          report.errorAndAbort(s"Invalid macro action type ${io.getquill.util.Format.TypeOf[A[Any]]} must be either Insert or Update")
       def summonMetaOfThis() =
         ofThis() match {
           case MacroType.Insert => Expr.summon[InsertMeta[T]]
@@ -259,14 +259,14 @@ object InsertUpdateMacro {
                   case Tuple(values) if (values.forall(_.isInstanceOf[Property])) =>
                     IgnoresSummonState.Static(values.toSet)
                   case other =>
-                    report.throwError(s"Invalid values in ${Format.TypeRepr(actionMeta.asTerm.tpe)}: ${other}. An ${Format.TypeRepr(actionMeta.asTerm.tpe)} AST must be a tuple of Property elements.")
+                    report.errorAndAbort(s"Invalid values in ${Format.TypeRepr(actionMeta.asTerm.tpe)}: ${other}. An ${Format.TypeRepr(actionMeta.asTerm.tpe)} AST must be a tuple of Property elements.")
                 }
               // if the meta is not inline
               case meta: Expr[InsertMeta[T] | UpdateMeta[T]] =>
                 if (isStatic) report.warning(s"The non-inlined variable `${Format.Expr(actionMeta)}:${Format.TypeRepr(actionMeta.asTerm.tpe.widen)}` will force the query to be dynamic. Try to change it to inline in order to fix the issue.")
                 IgnoresSummonState.Dynamic('{ InsertUpdateMacro.getQuotation($meta) })
               case null =>
-                report.throwError(
+                report.errorAndAbort(
                   s"The ${MacroType.asString}Meta ${io.getquill.util.Format.Expr(actionMeta)} is null. This is invalid."
                 )
             }
@@ -303,10 +303,10 @@ object InsertUpdateMacro {
             case Uprootable.Ast(astExpr) =>
               val ast = Unlifter(astExpr)
               if (!ast.isInstanceOf[CaseClass])
-                report.throwError(s"The lifted insertion element needs to be parsed as a Ast CaseClass but it is: ${ast}")
+                report.errorAndAbort(s"The lifted insertion element needs to be parsed as a Ast CaseClass but it is: ${ast}")
               ast.asInstanceOf[CaseClass]
             case _ =>
-              report.throwError(s"Cannot uproot lifted element. A lifted Insert element e.g. query[T].insertValue(lift(element)) must be lifted directly inside the lift clause. The elment was:\n${insertee.show}")
+              report.errorAndAbort(s"Cannot uproot lifted element. A lifted Insert element e.g. query[T].insertValue(lift(element)) must be lifted directly inside the lift clause. The elment was:\n${insertee.show}")
           }
         // Otherwise the inserted element (i.e. the insertee) is static and should be parsed as an ordinary case class
         // i.e. the case query[Person]insertValue(Person("Joe", "Bloggs")) (or the batch case)
@@ -318,13 +318,13 @@ object InsertUpdateMacro {
     /**
      * Parse the input to of query[Person]insertValue(Person("Joe", "Bloggs")) into CaseClass(firstName="Joe",lastName="Bloggs")
      */
-    def parseStaticInsertee(insertee: Expr[_]): CaseClass | AIdent = {
+    def parseStaticInsertee(insertee: Expr[?]): CaseClass | AIdent = {
       val rawAst = parser(insertee)
       val ast = BetaReduction(rawAst)
       ast match {
         case cc: CaseClass => cc
         case id: AIdent    => id
-        case _             => report.throwError(s"Parsed Insert Macro AST is not a Case Class: ${qprint(ast).plainText} (or a batch-query Ident)")
+        case _             => report.errorAndAbort(s"Parsed Insert Macro AST is not a Case Class: ${qprint(ast).plainText} (or a batch-query Ident)")
       }
     }
 

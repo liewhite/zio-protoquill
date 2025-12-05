@@ -30,7 +30,7 @@ case class GenericEncoderWithStringFallback[T, PrepareRow, Session](
 
   def apply(i: Int, t: Any, row: PrepareRow, session: Session): PrepareRow = {
     val classTagActual = classTagFromInstance(t)
-    if (t == null || classTagActual <:< classTagExpected)
+    if (t == null || classTagExpected.runtimeClass.isAssignableFrom(classTagActual.runtimeClass))
       // println(s"=============== ENCODING ${classTagActual}: $t as: ${Option(t.asInstanceOf[T])}")
       nullableEncoder(i, Option(t.asInstanceOf[T]), row, session)
     else

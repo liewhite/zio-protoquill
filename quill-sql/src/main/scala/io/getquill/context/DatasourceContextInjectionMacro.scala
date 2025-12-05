@@ -16,7 +16,7 @@ object DatasourceContextInjectionMacro {
           // println(s"============ Using Summoned DataSource from context =========")
           dc
         case None =>
-          report.throwError(s"Cannot find implicit data-source '${Printer.TypeReprCode.show(TypeRepr.of[Runner])}'")
+          report.errorAndAbort(s"Cannot find implicit data-source '${Printer.TypeReprCode.show(TypeRepr.of[Runner])}'")
       }
     else {
       memberDc

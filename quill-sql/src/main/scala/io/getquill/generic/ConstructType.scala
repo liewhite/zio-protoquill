@@ -5,7 +5,7 @@ import scala.deriving._
 import io.getquill.util.Format
 
 object ConstructType {
-  def apply[T: Type](m: Expr[Mirror.ProductOf[T]], children: List[(Type[_], Expr[_])])(using Quotes) = {
+  def apply[T: Type](m: Expr[Mirror.ProductOf[T]], children: List[(Type[?], Expr[?])])(using Quotes) = {
     import quotes.reflect._
     // println(s"---- Constructing Type for: ${Format.TypeOf[T]}")
 

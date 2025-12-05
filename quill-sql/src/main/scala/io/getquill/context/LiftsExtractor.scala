@@ -12,7 +12,7 @@ import io.getquill.ast.Ast
 object LiftsExtractor {
   /** For Dynamic queries, lazy lifts are not allowed. If one is encountered, fail */
   object Dynamic {
-    def apply[PrepareRowTemp, Session](allLifts: List[Planter[_, _, _]], row: PrepareRowTemp, session: Session) = {
+    def apply[PrepareRowTemp, Session](allLifts: List[Planter[?, ?, ?]], row: PrepareRowTemp, session: Session) = {
       val lifts = allLifts.map {
         case e: EagerPlanter[_, _, _]     => e
         case e: EagerListPlanter[_, _, _] => e
@@ -25,9 +25,9 @@ object LiftsExtractor {
     }
   }
 
-  def apply[PrepareRowTemp, Session](lifts: List[Planter[_, _, _]], row: PrepareRowTemp, session: Session) = {
+  def apply[PrepareRowTemp, Session](lifts: List[Planter[?, ?, ?]], row: PrepareRowTemp, session: Session) = {
 
-    def encodeSingleElement(lift: EagerPlanter[_, _, _], idx: Int, row: PrepareRowTemp): (Int, PrepareRowTemp, Any) = {
+    def encodeSingleElement(lift: EagerPlanter[?, ?, ?], idx: Int, row: PrepareRowTemp): (Int, PrepareRowTemp, Any) = {
       val prepRow = lift.asInstanceOf[EagerPlanter[Any, PrepareRowTemp, Session]].encoder(idx, lift.value, row, session).asInstanceOf[PrepareRowTemp]
       (1, prepRow, lift.value)
     }
@@ -39,7 +39,7 @@ object LiftsExtractor {
     // since the number of Question marks is already expanded (i.e. from the Unparticular.Query where it's just
     // one for the IN clause "WHERE p.name IN (?)" to the particular query where it's the number of elements
     // in the list i.e. "WHERE p.name IN (?, ?)")
-    def encodeElementList(lift: EagerListPlanter[_, _, _], idx: Int, row: PrepareRowTemp): (Int, PrepareRowTemp, Any) = {
+    def encodeElementList(lift: EagerListPlanter[?, ?, ?], idx: Int, row: PrepareRowTemp): (Int, PrepareRowTemp, Any) = {
       val listPlanter = lift.asInstanceOf[EagerListPlanter[Any, PrepareRowTemp, Session]]
       val prepRow =
         listPlanter.values.zipWithIndex.foldLeft(row) { case (newRow, (value, listIndex)) =>

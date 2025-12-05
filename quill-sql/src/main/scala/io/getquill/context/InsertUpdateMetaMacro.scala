@@ -30,7 +30,7 @@ object MetaMacro {
     // Pull out individual args from the apply
     val excludes = excludesRaw match {
       case Varargs(exprs) => exprs
-      case _              => quotes.reflect.report.throwError(s"Could not parse: ${excludesRaw.show} as a varargs parameter")
+      case _              => quotes.reflect.report.errorAndAbort(s"Could not parse: ${excludesRaw.show} as a varargs parameter")
     }
 
     // Parse those into Function(params, Property) asts
@@ -43,7 +43,7 @@ object MetaMacro {
         case Function(List(param), prop @ Property(_, _)) =>
           BetaReduction(prop, param -> InsertUpdateMacro.VIdent)
         case other =>
-          quotes.reflect.report.throwError(s"Could not recognize insert exclusion AST: ${other} as a valid exclusion AST")
+          quotes.reflect.report.errorAndAbort(s"Could not recognize insert exclusion AST: ${other} as a valid exclusion AST")
       }
 
     // Shove those into a tuple and return that

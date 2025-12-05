@@ -42,7 +42,7 @@ import scala.reflect.ClassTag
 object LiftQueryMacro {
   private[getquill] def newUuid = java.util.UUID.randomUUID().toString
 
-  def apply[T: Type, U[_] <: Iterable[_]: Type, PrepareRow: Type, Session: Type](entity: Expr[U[T]])(using Quotes): Expr[Query[T]] = {
+  def apply[T: Type, U[_] <: Iterable[?]: Type, PrepareRow: Type, Session: Type](entity: Expr[U[T]])(using Quotes): Expr[Query[T]] = {
     import quotes.reflect._
     // check if T is a case-class (e.g. mirrored entity) or a leaf, probably best way to do that
     val quat = QuatMaking.ofType[T]
@@ -93,7 +93,7 @@ object LiftMacro {
     }
 
   // TODO Injected => Injectable
-  private[getquill] def liftInjectedProduct[T, PrepareRow, Session](using qctx: Quotes, tpe: Type[T], prepareRowTpe: Type[PrepareRow], sessionTpe: Type[Session]): (CaseClass, List[Expr[InjectableEagerPlanter[_, PrepareRow, Session]]]) = {
+  private[getquill] def liftInjectedProduct[T, PrepareRow, Session](using qctx: Quotes, tpe: Type[T], prepareRowTpe: Type[PrepareRow], sessionTpe: Type[Session]): (CaseClass, List[Expr[InjectableEagerPlanter[?, PrepareRow, Session]]]) = {
     import qctx.reflect._
     val (caseClassAstInitial, liftsInitial) = liftInjectedProductComponents[T, PrepareRow]
     val TaggedLiftedCaseClass(caseClassAst, lifts) = TaggedLiftedCaseClass(caseClassAstInitial, liftsInitial).reKeyWithUids()
@@ -110,7 +110,7 @@ object LiftMacro {
     (caseClassAst, liftPlanters)
   }
 
-  private[getquill] def liftInjectedProductComponents[T, PrepareRow](using qctx: Quotes, tpe: Type[T], prepareRowTpe: Type[PrepareRow]): (CaseClass, List[(String, Expr[T => _])]) = {
+  private[getquill] def liftInjectedProductComponents[T, PrepareRow](using qctx: Quotes, tpe: Type[T], prepareRowTpe: Type[PrepareRow]): (CaseClass, List[(String, Expr[T => ?])]) = {
     import qctx.reflect._
     import scala.quoted._
     import io.getquill.util.Format
@@ -180,11 +180,11 @@ object LiftMacro {
     '{ CaseClassLift[T]($quotation, ${ Expr(java.util.UUID.randomUUID.toString) }) } // NOTE UUID technically not needed here. Can try to remove it later
   }
 
-  private[getquill] def summonEncoderOrFail[T: Type, PrepareRow: Type, Session: Type](loggingEntity: Expr[_])(using Quotes) = {
+  private[getquill] def summonEncoderOrFail[T: Type, PrepareRow: Type, Session: Type](loggingEntity: Expr[?])(using Quotes) = {
     import quotes.reflect._
     Expr.summon[GenericEncoder[T, PrepareRow, Session]] match {
       case Some(enc) => enc
-      case None      => report.throwError(s"Cannot Find a '${Printer.TypeReprCode.show(TypeRepr.of[T])}' Encoder of ${Printer.TreeShortCode.show(loggingEntity.asTerm)}", loggingEntity)
+      case None      => report.errorAndAbort(s"Cannot Find a '${Printer.TypeReprCode.show(TypeRepr.of[T])}' Encoder of ${Printer.TreeShortCode.show(loggingEntity.asTerm)}", loggingEntity)
     }
   }
 
@@ -204,7 +204,7 @@ object LiftMacro {
     val expectedClassTag =
       Expr.summon[ClassTag[T]] match {
         case Some(value) => value
-        case None        => report.throwError(s"Cannot create a classTag for the type ${Format.TypeOf[T]} for the value ${fieldName}. Cannot create a string-fallback encoder.")
+        case None        => report.errorAndAbort(s"Cannot create a classTag for the type ${Format.TypeOf[T]} for the value ${fieldName}. Cannot create a string-fallback encoder.")
       }
     val converterExpr: Expr[Either[String, FromString[T]]] =
       StringCodec.FromString.summonExpr[T] match {
@@ -220,12 +220,12 @@ object LiftMacro {
     }
   }
 
-  private[getquill] def injectableLiftValue[T: Type, PrepareRow: Type, Session: Type](valueEntity: Expr[_ => T], uuid: String = newUuid)(using Quotes) /*: Expr[EagerPlanter[T, PrepareRow]]*/ = {
+  private[getquill] def injectableLiftValue[T: Type, PrepareRow: Type, Session: Type](valueEntity: Expr[? => T], uuid: String = newUuid)(using Quotes) /*: Expr[EagerPlanter[T, PrepareRow]]*/ = {
     import quotes.reflect._
     val encoder =
       Expr.summon[GenericEncoder[T, PrepareRow, Session]] match {
         case Some(enc) => enc
-        case None => report.throwError(
+        case None => report.errorAndAbort(
             s"Cannot inject the value: ${io.getquill.util.Format.Expr(valueEntity)}.Cannot Find a '${Printer.TypeReprCode.show(TypeRepr.of[T])}' Encoder of ${Printer.TreeShortCode.show(valueEntity.asTerm)}",
             valueEntity
           )

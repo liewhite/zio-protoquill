@@ -34,13 +34,13 @@ trait LowPriorityImplicits { self: EncodingDsl =>
   // Named class to avoid anonymous class duplication at inline sites
   private class AnyValEncoderContextImpl[Cls] extends AnyValEncoderContext[Encoder, Cls] {
     override def makeMappedEncoder[Base](mapped: MappedEncoding[Cls, Base], encoder: Encoder[Base]): Encoder[Cls] =
-      self.mappedEncoder(mapped, encoder)
+      self.mappedEncoder(using mapped, encoder)
   }
 
   // Named class to avoid anonymous class duplication at inline sites
   private class AnyValDecoderContextImpl[Cls] extends AnyValDecoderContext[Decoder, Cls] {
     override def makeMappedDecoder[Base](mapped: MappedEncoding[Base, Cls], decoder: Decoder[Base]): Decoder[Cls] =
-      self.mappedDecoder(mapped, decoder)
+      self.mappedDecoder(using mapped, decoder)
   }
 
   implicit inline def anyValEncoder[Cls <: AnyVal]: Encoder[Cls] =

@@ -44,7 +44,7 @@ object Particularize {
     /** Convenience constructor for doing particularization from an Unparticular.Query */
     def apply[PrepareRowTemp: Type](
         query: Unparticular.Query,
-        lifts: List[Expr[Planter[_, _, _]]],
+        lifts: List[Expr[Planter[?, ?, ?]]],
         runtimeLiftingPlaceholder: Expr[Int => String],
         emptySetContainsToken: Expr[Token => Token],
         valuesClauseRepeats: Expr[Int]
@@ -61,7 +61,7 @@ object Particularize {
     /** Convenience constructor for doing particularization from an Unparticular.Query */
     def apply[PrepareRowTemp](
         query: Unparticular.Query,
-        lifts: List[Planter[_, _, _]],
+        lifts: List[Planter[?, ?, ?]],
         liftingPlaceholder: Int => String,
         emptySetContainsToken: Token => Token,
         valuesClauseRepeats: Int = 1
@@ -73,7 +73,7 @@ object Particularize {
     val interp = new Interpolator(TraceType.Particularization, traceConfig, 1)
     import interp._
 
-    def apply(statements: Statement, lifts: List[Planter[_, _, _]], liftingPlaceholder: Int => String, emptySetContainsToken: Token => Token, valuesClauseRepeats: Int): (String, LiftsOrderer) = {
+    def apply(statements: Statement, lifts: List[Planter[?, ?, ?]], liftingPlaceholder: Int => String, emptySetContainsToken: Token => Token, valuesClauseRepeats: Int): (String, LiftsOrderer) = {
       enum LiftChoice {
         case ListLift(value: EagerListPlanter[Any, PrepareRowTemp, Session])
         case SingleLift(value: Planter[Any, PrepareRowTemp, Session])
@@ -299,7 +299,7 @@ object Particularize {
         case StringToken(string)                   => '{ io.getquill.idiom.StringToken(${ string.expr }) }
         case s: Statement                          => liftStatement(s)
         case SetContainsToken(a, op, b)            => '{ io.getquill.idiom.SetContainsToken(${ a.expr }, ${ op.expr }, ${ b.expr }) }
-        case ScalarLiftToken(lift)                 => quotes.reflect.report.throwError("Scalar Lift Tokens are not used in Dotty Quill. Only Scalar Lift Tokens.")
+        case ScalarLiftToken(lift)                 => quotes.reflect.report.errorAndAbort("Scalar Lift Tokens are not used in Dotty Quill. Only Scalar Lift Tokens.")
         case ValuesClauseToken(stmt)               => '{ io.getquill.idiom.ValuesClauseToken(${ stmt.expr }) }
       }
     }

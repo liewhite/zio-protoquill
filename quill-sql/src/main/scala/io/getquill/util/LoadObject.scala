@@ -60,7 +60,7 @@ object Load {
   } // end Module
 
   object Class {
-    def fromTypeRepr(using Quotes)(loadClassType: quotes.reflect.TypeRepr): Try[java.lang.Class[_]] =
+    def fromTypeRepr(using Quotes)(loadClassType: quotes.reflect.TypeRepr): Try[java.lang.Class[?]] =
       for {
         symLoad <- symbolType(loadClassType)
         sym <-

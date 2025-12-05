@@ -28,7 +28,7 @@ object VerifyFreeVariables {
     import quotes.reflect._
     verify(ast) match {
       case Right(ast)  => ast
-      case Left(error) => report.throwError(error)
+      case Left(error) => report.errorAndAbort(error)
     }
   }
 

@@ -85,14 +85,14 @@ object QueryMetaExtractor {
 
   def attemptStaticRequip[T: Type, R: Type](
       queryLot: QuotedExpr,
-      queryLifts: List[PlanterExpr[_, _, _]],
+      queryLifts: List[PlanterExpr[?, ?, ?]],
       quip: Expr[QueryMeta[T, R]]
   )(using Quotes): Option[StaticRequip[T, R]] = {
     import quotes.reflect.report
 
     val quipLotExpr = quip match {
       case QuotationLotExpr(qbin) => qbin
-      case _                      => report.throwError("QueryMeta expression is not in a valid form: " + quip)
+      case _                      => report.errorAndAbort("QueryMeta expression is not in a valid form: " + quip)
     }
 
     quipLotExpr match {
@@ -101,7 +101,7 @@ object QueryMetaExtractor {
         val baq =
           up.extra match {
             case List(baq) => baq
-            case _         => report.throwError("Invalid Query Meta Form. ContraMap 'baq' function not defined.")
+            case _         => report.errorAndAbort("Invalid Query Meta Form. ContraMap 'baq' function not defined.")
           }
 
         // Don't need to unlift the ASTs and re-lift them. Just put them into a FunctionApply
@@ -181,9 +181,9 @@ object QueryMetaExtractor {
             (requip, '{ $quip.extract }, None)
         }
 
-      // report.throwError("Quote Meta Identified but not found!")
+      // report.errorAndAbort("Quote Meta Identified but not found!")
       case None =>
-        report.throwError("Quote Meta needed but not found!")
+        report.errorAndAbort("Quote Meta needed but not found!")
     }
   }
 }

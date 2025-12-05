@@ -102,7 +102,7 @@ object Lifters {
       import quotes.reflect._
       import io.getquill.util.Messages.qprint
       lift.lift(element).getOrElse {
-        report.throwError(failMsg(element))
+        report.errorAndAbort(failMsg(element))
       }
     }
 

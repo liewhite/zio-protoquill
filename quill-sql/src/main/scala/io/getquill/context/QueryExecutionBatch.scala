@@ -226,7 +226,7 @@ object QueryExecutionBatch {
       Session: Type,
       D <: Idiom: Type,
       N <: NamingStrategy: Type,
-      Ctx <: Context[_, _],
+      Ctx <: Context[?, ?],
       Res: Type
   ](quotedRaw: Expr[Quoted[BatchAction[A]]], batchContextOperation: Expr[ContextOperation.Batch[I, T, A, D, N, PrepareRow, ResultRow, Session, Ctx, Res]], rowsPerQuery: Expr[Int])(using Quotes, Type[Ctx]) {
     import quotes.reflect._
@@ -252,7 +252,7 @@ object QueryExecutionBatch {
           else
             ExtractBehavior.Skip
         case _ =>
-          report.throwError(s"Could not match type type of the quoted operation: ${io.getquill.util.Format.TypeOf[A]}")
+          report.errorAndAbort(s"Could not match type type of the quoted operation: ${io.getquill.util.Format.TypeOf[A]}")
       }
 
     /**
@@ -261,7 +261,7 @@ object QueryExecutionBatch {
      * e.g. given    liftQuery(people).foreach(p => query[Person].insert[Person](p))
      * then create a liftQuery(people).foreach(p => query[Person].insert[Person](_.name -> lift(p.name), _.age -> lift(p.age)))
      */
-    def expandQuotation(actionQueryAstExpr: Expr[Ast], batchActionType: BatchActionType, perRowLifts: Expr[List[InjectableEagerPlanter[_, PrepareRow, Session]]]) =
+    def expandQuotation(actionQueryAstExpr: Expr[Ast], batchActionType: BatchActionType, perRowLifts: Expr[List[InjectableEagerPlanter[?, PrepareRow, Session]]]) =
       batchActionType match {
         case BatchActionType.Insert => '{ Quoted[Insert[I]]($actionQueryAstExpr, ${ perRowLifts }, Nil) }
         case BatchActionType.Update => '{ Quoted[Update[I]]($actionQueryAstExpr, ${ perRowLifts }, Nil) }
@@ -298,7 +298,7 @@ object QueryExecutionBatch {
     } // end applyDynamic
 
     enum ExpansionType {
-      case Entities(entities: Expr[Iterable[_]])
+      case Entities(entities: Expr[Iterable[?]])
       case Values(values: Expr[List[Any]], encoder: Expr[GenericEncoder[Any, PrepareRow, Session]])
     }
 
@@ -335,7 +335,7 @@ object QueryExecutionBatch {
           StaticTranslationMacro[D, N](expandedQuotation, ElaborationBehavior.Skip, topLevelQuat, comps.categorizedPlanters.map(_.planter), Some(comps.foreachIdent)) match {
             case Some(state @ StaticState(query, filteredPerRowLiftsRaw, _, _, secondaryLifts)) =>
               // create an extractor for returning actions
-              val filteredPerRowLifts = filteredPerRowLiftsRaw.asInstanceOf[List[InjectableEagerPlanterExpr[_, _, _]]]
+              val filteredPerRowLifts = filteredPerRowLiftsRaw.asInstanceOf[List[InjectableEagerPlanterExpr[?, ?, ?]]]
               val extractor = MakeExtractor[ResultRow, Session, T, T].static(state, identityConverter, extractionBehavior)
 
               // In an expression we could have a whole bunch of different lifts
@@ -439,13 +439,13 @@ object QueryExecutionBatch {
   inline def apply[
       I,
       T,
-      A <: QAC[I, T] with Action[I],
+      A <: QAC[I, T] & Action[I],
       ResultRow,
       PrepareRow,
       Session,
       D <: Idiom,
       N <: NamingStrategy,
-      Ctx <: Context[_, _],
+      Ctx <: Context[?, ?],
       Res
   ](ctx: ContextOperation.Batch[I, T, A, D, N, PrepareRow, ResultRow, Session, Ctx, Res], rowsPerQuery: Int)(inline quoted: Quoted[BatchAction[A]]) =
     ${ applyImpl[I, T, A, ResultRow, PrepareRow, Session, D, N, Ctx, Res]('quoted, 'ctx, 'rowsPerQuery) }
@@ -453,13 +453,13 @@ object QueryExecutionBatch {
   def applyImpl[
       I: Type,
       T: Type,
-      A <: QAC[I, T] with Action[I]: Type,
+      A <: QAC[I, T] & Action[I]: Type,
       ResultRow: Type,
       PrepareRow: Type,
       Session: Type,
       D <: Idiom: Type,
       N <: NamingStrategy: Type,
-      Ctx <: Context[_, _],
+      Ctx <: Context[?, ?],
       Res: Type
   ](quoted: Expr[Quoted[BatchAction[A]]], ctx: Expr[ContextOperation.Batch[I, T, A, D, N, PrepareRow, ResultRow, Session, Ctx, Res]], rowsPerQuery: Expr[Int])(using Quotes, Type[Ctx]): Expr[Res] =
     new RunQuery[I, T, A, ResultRow, PrepareRow, Session, D, N, Ctx, Res](quoted, ctx, rowsPerQuery).apply()
@@ -496,10 +496,10 @@ object BatchStatic {
         (primary, list :+ PlanterKind.Other(planter))
       // this means we haven't found the primary planter yet (don't think this can happen because nothing can be before liftQuery), keep going
       case ((primary @ None, list), planter) =>
-        report.throwError("Invalid planter traversal")
+        report.errorAndAbort("Invalid planter traversal")
     } match {
       case (Some(primary), categorizedPlanters) => (primary, categorizedPlanters)
-      case (None, _)                            => report.throwError(s"Could not find an entities list-lift (i.e. liftQuery(entities/scalars) in liftQuery(...).foreach()) in lifts: ${planters.map(p => Format.Expr(p.plant))}")
+      case (None, _)                            => report.errorAndAbort(s"Could not find an entities list-lift (i.e. liftQuery(entities/scalars) in liftQuery(...).foreach()) in lifts: ${planters.map(p => Format.Expr(p.plant))}")
     }
   }
 
@@ -567,7 +567,7 @@ object BatchStatic {
       import quotes.reflect._
       element match {
         case Right(value) => value
-        case Left(error)  => report.throwError(error)
+        case Left(error)  => report.errorAndAbort(error)
       }
     }
   }

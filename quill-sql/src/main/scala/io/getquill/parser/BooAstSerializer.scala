@@ -11,6 +11,7 @@ import scala.reflect.classTag
 import java.nio.ByteBuffer
 import java.util.Base64
 import scala.collection.mutable.LinkedHashMap
+import scala.annotation.nowarn
 
 object AstPicklers {
   import QuatPicklers._
@@ -21,14 +22,14 @@ object AstPicklers {
     override def pickle(value: Ident)(implicit state: PickleState): Unit = {
       state.pickle(value.name)
       state.pickle(value.bestQuat)
-      state.pickle(value.visibility)(visibilityPickler)
+      state.pickle(value.visibility)(using visibilityPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): Ident = {
       // Need to do this here because can't put things into the class by value
       val a = state.unpickle[String]
       val b = state.unpickle[Quat]
-      val vis = state.unpickle[Visibility](visibilityPickler)
+      val vis = state.unpickle[Visibility](using visibilityPickler)
       Ident.Opinionated(a, b, vis)
     }
   }
@@ -53,25 +54,25 @@ object AstPicklers {
 
   implicit object distinctPickler extends Pickler[Distinct] {
     override def pickle(value: Distinct)(implicit state: PickleState): Unit = {
-      state.pickle(value.a)(astPickler)
+      state.pickle(value.a)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): Distinct =
-      new Distinct(state.unpickle[Ast](astPickler))
+      new Distinct(state.unpickle[Ast](using astPickler))
   }
 
   implicit object nestedPickler extends Pickler[Nested] {
     override def pickle(value: Nested)(implicit state: PickleState): Unit = {
-      state.pickle(value.a)(astPickler)
+      state.pickle(value.a)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): Nested =
-      new Nested(state.unpickle[Ast](astPickler))
+      new Nested(state.unpickle[Ast](using astPickler))
   }
 
   implicit val queryPickler: CompositePickler[Query] =
     compositePickler[Query]
-      .addConcreteType[Entity](entityPickler, classTag[Entity])
+      .addConcreteType[Entity](using entityPickler, classTag[Entity])
       .addConcreteType[Filter]
       .addConcreteType[Map]
       .addConcreteType[FlatMap]
@@ -88,8 +89,8 @@ object AstPicklers {
       .addConcreteType[FlatJoin]
       .addConcreteType[DistinctOn]
       // For some reason, case classes that have only one parameter need a manually defined pickler
-      .addConcreteType[Distinct](distinctPickler, classTag[Distinct])
-      .addConcreteType[Nested](nestedPickler, classTag[Nested])
+      .addConcreteType[Distinct](using distinctPickler, classTag[Distinct])
+      .addConcreteType[Nested](using nestedPickler, classTag[Nested])
 
   // ==== Ordering Picker ====
   implicit object tupleOrderingPicker extends Pickler[TupleOrdering] {
@@ -111,8 +112,8 @@ object AstPicklers {
       .addConcreteType[DescNullsLast.type]
   implicit val orderingPickler: CompositePickler[Ordering] =
     compositePickler[Ordering]
-      .addConcreteType[TupleOrdering](tupleOrderingPicker, classTag[TupleOrdering])
-      .join[PropertyOrdering](propertyOrderingPickler)
+      .addConcreteType[TupleOrdering](using tupleOrderingPicker, classTag[TupleOrdering])
+      .join[PropertyOrdering](using propertyOrderingPickler)
 
   implicit object infixPickler extends Pickler[Infix] {
     override def pickle(value: Infix)(implicit state: PickleState): Unit = {
@@ -199,97 +200,97 @@ object AstPicklers {
 
   implicit object optionFlattenPickler extends Pickler[OptionFlatten] {
     override def pickle(value: OptionFlatten)(implicit state: PickleState): Unit = {
-      state.pickle(value.ast)(astPickler)
+      state.pickle(value.ast)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): OptionFlatten =
-      new OptionFlatten(state.unpickle[Ast](astPickler))
+      new OptionFlatten(state.unpickle[Ast](using astPickler))
   }
 
   implicit object optionIsEmptyPickler extends Pickler[OptionIsEmpty] {
     override def pickle(value: OptionIsEmpty)(implicit state: PickleState): Unit = {
-      state.pickle(value.ast)(astPickler)
+      state.pickle(value.ast)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): OptionIsEmpty =
-      new OptionIsEmpty(state.unpickle[Ast](astPickler))
+      new OptionIsEmpty(state.unpickle[Ast](using astPickler))
   }
 
   implicit object optionNonEmptyPickler extends Pickler[OptionNonEmpty] {
     override def pickle(value: OptionNonEmpty)(implicit state: PickleState): Unit = {
-      state.pickle(value.ast)(astPickler)
+      state.pickle(value.ast)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): OptionNonEmpty =
-      new OptionNonEmpty(state.unpickle[Ast](astPickler))
+      new OptionNonEmpty(state.unpickle[Ast](using astPickler))
   }
 
   implicit object optionIsDefinedPickler extends Pickler[OptionIsDefined] {
     override def pickle(value: OptionIsDefined)(implicit state: PickleState): Unit = {
-      state.pickle(value.ast)(astPickler)
+      state.pickle(value.ast)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): OptionIsDefined =
-      new OptionIsDefined(state.unpickle[Ast](astPickler))
+      new OptionIsDefined(state.unpickle[Ast](using astPickler))
   }
 
   implicit object optionSomePickler extends Pickler[OptionSome] {
     override def pickle(value: OptionSome)(implicit state: PickleState): Unit = {
-      state.pickle(value.ast)(astPickler)
+      state.pickle(value.ast)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): OptionSome =
-      new OptionSome(state.unpickle[Ast](astPickler))
+      new OptionSome(state.unpickle[Ast](using astPickler))
   }
 
   implicit object optionApplyPickler extends Pickler[OptionApply] {
     override def pickle(value: OptionApply)(implicit state: PickleState): Unit = {
-      state.pickle(value.ast)(astPickler)
+      state.pickle(value.ast)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): OptionApply =
-      new OptionApply(state.unpickle[Ast](astPickler))
+      new OptionApply(state.unpickle[Ast](using astPickler))
   }
 
   implicit object optionOrNullPickler extends Pickler[OptionOrNull] {
     override def pickle(value: OptionOrNull)(implicit state: PickleState): Unit = {
-      state.pickle(value.ast)(astPickler)
+      state.pickle(value.ast)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): OptionOrNull =
-      new OptionOrNull(state.unpickle[Ast](astPickler))
+      new OptionOrNull(state.unpickle[Ast](using astPickler))
   }
 
   implicit object optionGetOrNullPickler extends Pickler[OptionGetOrNull] {
     override def pickle(value: OptionGetOrNull)(implicit state: PickleState): Unit = {
-      state.pickle(value.ast)(astPickler)
+      state.pickle(value.ast)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): OptionGetOrNull =
-      new OptionGetOrNull(state.unpickle[Ast](astPickler))
+      new OptionGetOrNull(state.unpickle[Ast](using astPickler))
   }
 
   implicit val optionOperationPickler: CompositePickler[OptionOperation] =
     compositePickler[OptionOperation]
-      .addConcreteType[OptionFlatten](optionFlattenPickler, classTag[OptionFlatten])
+      .addConcreteType[OptionFlatten](using optionFlattenPickler, classTag[OptionFlatten])
       .addConcreteType[OptionGetOrElse]
       .addConcreteType[OptionFlatMap]
       .addConcreteType[OptionMap]
       .addConcreteType[OptionForall]
       .addConcreteType[OptionExists]
       .addConcreteType[OptionContains]
-      .addConcreteType[OptionIsEmpty](optionIsEmptyPickler, classTag[OptionIsEmpty])
-      .addConcreteType[OptionNonEmpty](optionNonEmptyPickler, classTag[OptionNonEmpty])
-      .addConcreteType[OptionIsDefined](optionIsDefinedPickler, classTag[OptionIsDefined])
+      .addConcreteType[OptionIsEmpty](using optionIsEmptyPickler, classTag[OptionIsEmpty])
+      .addConcreteType[OptionNonEmpty](using optionNonEmptyPickler, classTag[OptionNonEmpty])
+      .addConcreteType[OptionIsDefined](using optionIsDefinedPickler, classTag[OptionIsDefined])
       .addConcreteType[OptionTableFlatMap]
       .addConcreteType[OptionTableMap]
       .addConcreteType[OptionTableExists]
       .addConcreteType[OptionTableForall]
-      .addConcreteType[OptionNone](optionNonePickler, classTag[OptionNone])
-      .addConcreteType[OptionSome](optionSomePickler, classTag[OptionSome])
-      .addConcreteType[OptionApply](optionApplyPickler, classTag[OptionApply])
-      .addConcreteType[OptionOrNull](optionOrNullPickler, classTag[OptionOrNull])
-      .addConcreteType[OptionGetOrNull](optionGetOrNullPickler, classTag[OptionGetOrNull])
+      .addConcreteType[OptionNone](using optionNonePickler, classTag[OptionNone])
+      .addConcreteType[OptionSome](using optionSomePickler, classTag[OptionSome])
+      .addConcreteType[OptionApply](using optionApplyPickler, classTag[OptionApply])
+      .addConcreteType[OptionOrNull](using optionOrNullPickler, classTag[OptionOrNull])
+      .addConcreteType[OptionGetOrNull](using optionGetOrNullPickler, classTag[OptionGetOrNull])
       .addConcreteType[FilterIfDefined]
 
   // ==== IterableOperation Picker ====
@@ -400,12 +401,12 @@ object AstPicklers {
         .addConcreteType[ConstantTypes.Unit.type]
 
     override def pickle(value: Constant)(implicit state: PickleState): Unit = {
-      state.pickle(ConstantTypes.from(value))(constantTypesPickler)
+      state.pickle(ConstantTypes.from(value))(using constantTypesPickler)
       state.pickle(value.bestQuat)
       ()
     }
     override def unpickle(implicit state: UnpickleState): Constant = {
-      val a = state.unpickle(constantTypesPickler).v
+      val a = state.unpickle(using constantTypesPickler).v
       val b = state.unpickle[Quat]
       Constant(a, b)
     }
@@ -437,19 +438,19 @@ object AstPicklers {
 
   implicit val valuePickler: CompositePickler[Value] =
     compositePickler[Value]
-      .addConcreteType[Constant](constantPickler, classTag[Constant])
+      .addConcreteType[Constant](using constantPickler, classTag[Constant])
       .addConcreteType[NullValue.type]
-      .addConcreteType[Tuple](tuplePickler, classTag[Tuple])
-      .addConcreteType[CaseClass](caseClassPickler, classTag[CaseClass])
+      .addConcreteType[Tuple](using tuplePickler, classTag[Tuple])
+      .addConcreteType[CaseClass](using caseClassPickler, classTag[CaseClass])
 
   // ==== Action Picker ====
   implicit object deletePickler extends Pickler[Delete] {
     override def pickle(value: Delete)(implicit state: PickleState): Unit = {
-      state.pickle(value.query)(astPickler)
+      state.pickle(value.query)(using astPickler)
       ()
     }
     override def unpickle(implicit state: UnpickleState): Delete =
-      new Delete(state.unpickle[Ast](astPickler))
+      new Delete(state.unpickle[Ast](using astPickler))
   }
 
   implicit val returningActionPickler: CompositePickler[ReturningAction] =
@@ -494,7 +495,7 @@ object AstPicklers {
     compositePickler[Action]
       .addConcreteType[Insert]
       .addConcreteType[Update]
-      .addConcreteType[Delete](deletePickler, classTag[Delete])
+      .addConcreteType[Delete](using deletePickler, classTag[Delete])
       .join[ReturningAction]
       .addConcreteType[Foreach]
       .addConcreteType[OnConflict]
@@ -514,26 +515,28 @@ object AstPicklers {
       .addConcreteType[ScalarTag]
       .addConcreteType[QuotationTag]
 
+  // Recursive pickler definition is intentional - AST nodes contain other AST nodes
+  @nowarn("msg=Infinite loop")
   implicit val astPickler: CompositePickler[Ast] =
     compositePickler[Ast]
       .join[Query]
       .join[Ordering]
-      .addConcreteType(infixPickler, classTag[Infix])
-      .addConcreteType(functionPickler, classTag[Function])
-      .addConcreteType(identPickler, classTag[Ident])
-      .addConcreteType(externalIdentPickler, classTag[ExternalIdent])
-      .addConcreteType(propertyPickler, classTag[Property])
+      .addConcreteType(using infixPickler, classTag[Infix])
+      .addConcreteType(using functionPickler, classTag[Function])
+      .addConcreteType(using identPickler, classTag[Ident])
+      .addConcreteType(using externalIdentPickler, classTag[ExternalIdent])
+      .addConcreteType(using propertyPickler, classTag[Property])
       .join[OptionOperation]
       .join[IterableOperation]
-      .addConcreteType(ifPickler, classTag[If])
-      .addConcreteType[Assignment](assignmentPickler, classTag[Assignment])
-      .addConcreteType[AssignmentDual](assignmentDualPickler, classTag[AssignmentDual])
+      .addConcreteType(using ifPickler, classTag[If])
+      .addConcreteType[Assignment](using assignmentPickler, classTag[Assignment])
+      .addConcreteType[AssignmentDual](using assignmentDualPickler, classTag[AssignmentDual])
       .join[Operation]
       .join[Value]
       .addConcreteType[Block]
       .addConcreteType[Val]
-      .addConcreteType[OnConflict.Excluded](onConflictExcludedPickler, classTag[OnConflict.Excluded])
-      .addConcreteType[OnConflict.Existing](onConflictExistingPickler, classTag[OnConflict.Existing])
+      .addConcreteType[OnConflict.Excluded](using onConflictExcludedPickler, classTag[OnConflict.Excluded])
+      .addConcreteType[OnConflict.Existing](using onConflictExistingPickler, classTag[OnConflict.Existing])
       .join[Action]
       .join[Tag]
 }

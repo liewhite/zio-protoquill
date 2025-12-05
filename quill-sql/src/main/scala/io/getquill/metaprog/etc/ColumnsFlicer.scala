@@ -23,14 +23,14 @@ object ColumnsFlicer {
 }
 
 class ColumnsFlicerMacro {
-  def isProduct(using Quotes)(tpe: Type[_]): Boolean = {
+  def isProduct(using Quotes)(tpe: Type[?]): Boolean = {
     import quotes.reflect._
     TypeRepr.of(using tpe) <:< TypeRepr.of[Product]
   }
 
   private def recurse[T, PrepareRow, Session, Fields, Types](using
       Quotes
-  )(id: quotes.reflect.Term, fieldsTup: Type[Fields], typesTup: Type[Types])(columns: Expr[List[String]])(using baseType: Type[T], pr: Type[PrepareRow], sess: Type[Session]): List[(Type[_], Expr[_])] = {
+  )(id: quotes.reflect.Term, fieldsTup: Type[Fields], typesTup: Type[Types])(columns: Expr[List[String]])(using baseType: Type[T], pr: Type[PrepareRow], sess: Type[Session]): List[(Type[?], Expr[?])] = {
     import quotes.reflect._
     (fieldsTup, typesTup) match {
       case ('[field *: fields], '[tpe *: types]) =>
@@ -42,7 +42,7 @@ class ColumnsFlicerMacro {
         // 'invocation' of the found method e.g. p.name
         val childTTerm = '{ (${ Select(id, fieldMethod).asExprOf[tpe] }) }
 
-        if (Expr.summon[GenericDecoder[_, Session, tpe, DecodingType.Specific]].isDefined) then {
+        if (Expr.summon[GenericDecoder[?, Session, tpe, DecodingType.Specific]].isDefined) then {
           // TODO Maybe use ==1 versus 'true' in this case. See how this plays out with VendorizeBooleans behavior
           val liftClause = '{ $columns.contains(${ Expr(fieldString) }) }
           val liftedCondition = LiftMacro.apply[Boolean, PrepareRow, Session](liftClause)
@@ -64,7 +64,7 @@ class ColumnsFlicerMacro {
         }
 
       case (_, '[EmptyTuple]) => Nil
-      case _                  => report.throwError("Cannot generically derive Types In Expression:\n" + (fieldsTup, typesTup))
+      case _                  => report.errorAndAbort("Cannot generically derive Types In Expression:\n" + (fieldsTup, typesTup))
     }
   }
 
@@ -78,11 +78,11 @@ class ColumnsFlicerMacro {
             val fields = recurse[T, PrepareRow, Session, elementLabels, elementTypes](expr.asTerm, Type.of[elementLabels], Type.of[elementTypes])(columns)(using tpe)
             ConstructType[T](m, fields)
           case _ =>
-            report.throwError(s"Mirror for ${Type.of[T]} is not a product")
+            report.errorAndAbort(s"Mirror for ${Type.of[T]} is not a product")
         }
       }
       case None =>
-        report.throwError(s"Cannot derive a mirror for ${Type.of[T]}")
+        report.errorAndAbort(s"Cannot derive a mirror for ${Type.of[T]}")
     }
   }
 }

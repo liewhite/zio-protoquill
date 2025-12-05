@@ -29,7 +29,7 @@ trait EntityQuery[T] extends EntityQueryModel[T] with Unquoteable {
   override def map[R](f: T => R): EntityQuery[R] = NonQuotedException()
 }
 
-class Quoted[+T](val ast: io.getquill.ast.Ast, val lifts: List[Planter[_, _, _]], val runtimeQuotes: List[QuotationVase]) {
+class Quoted[+T](val ast: io.getquill.ast.Ast, val lifts: List[Planter[?, ?, ?]], val runtimeQuotes: List[QuotationVase]) {
   // This is not a case-class because the dynamic API uses (quoted:Quoted[(foo, bar)])._1 etc... which would return quoted.ast
   // where instead we want unquote(quoted)._1 to happen instead but the implicit unquote would never happen if quoted
   // is a case class in the _1 property is available on the object.
@@ -41,7 +41,7 @@ class Quoted[+T](val ast: io.getquill.ast.Ast, val lifts: List[Planter[_, _, _]]
       case q: Quoted[_] => q.id == this.id
       case _            => false
     }
-  def copy(ast: io.getquill.ast.Ast = this.ast, lifts: List[Planter[_, _, _]] = this.lifts, runtimeQuotes: List[QuotationVase] = this.runtimeQuotes) =
+  def copy(ast: io.getquill.ast.Ast = this.ast, lifts: List[Planter[?, ?, ?]] = this.lifts, runtimeQuotes: List[QuotationVase] = this.runtimeQuotes) =
     Quoted(ast, lifts, runtimeQuotes)
 
   def dedupeRuntimeBinds: Quoted[T] = {
@@ -55,7 +55,7 @@ class Quoted[+T](val ast: io.getquill.ast.Ast, val lifts: List[Planter[_, _, _]]
         case tag: QuotationTag if (bindMap.contains(tag.uid)) => tag.copy(uid = bindMap(tag.uid))
       }
 
-    def rekeyLeafBinds(quoted: Quoted[_]) = {
+    def rekeyLeafBinds(quoted: Quoted[?]) = {
       val (liftIdMap, newPlanters) = quoted.lifts.map { lift =>
         val newId = UUID.randomUUID().toString
         val newLift = lift.rekey(newId)
@@ -66,7 +66,7 @@ class Quoted[+T](val ast: io.getquill.ast.Ast, val lifts: List[Planter[_, _, _]]
     }
     // need to rekey depth-first, otherwise the same uid might be rekeyed multiple times which is not the correct behavior
     // innermost binds need to be rekeyed first
-    def rekeyRecurse(quoted: Quoted[_]): Quoted[_] = {
+    def rekeyRecurse(quoted: Quoted[?]): Quoted[?] = {
       // rekey leaf binds of the children, for inner most children runtimeQuotes shuold be empty
       val (vaseIdMap, newVases) = quoted.runtimeQuotes.map { vase =>
         val newVaseId = UUID.randomUUID().toString
@@ -85,8 +85,8 @@ class Quoted[+T](val ast: io.getquill.ast.Ast, val lifts: List[Planter[_, _, _]]
   }
 }
 object Quoted {
-  case class QuotedId(val ast: io.getquill.ast.Ast, val lifts: List[Planter[_, _, _]], val runtimeQuotes: List[QuotationVase])
-  def apply[T](ast: io.getquill.ast.Ast, lifts: List[Planter[_, _, _]], runtimeQuotes: List[QuotationVase]) =
+  case class QuotedId(val ast: io.getquill.ast.Ast, val lifts: List[Planter[?, ?, ?]], val runtimeQuotes: List[QuotationVase])
+  def apply[T](ast: io.getquill.ast.Ast, lifts: List[Planter[?, ?, ?]], runtimeQuotes: List[QuotationVase]) =
     new Quoted[T](ast, lifts, runtimeQuotes)
   def unapply[T](quoted: Quoted[T]) =
     Some((quoted.ast, quoted.lifts, quoted.runtimeQuotes))
@@ -127,7 +127,7 @@ object compat {
   }
 }
 
-case class InjectableEagerPlanter[T, PrepareRow, Session](inject: _ => T, encoder: GenericEncoder[T, PrepareRow, Session], uid: String) extends Planter[T, PrepareRow, Session] {
+case class InjectableEagerPlanter[T, PrepareRow, Session](inject: ? => T, encoder: GenericEncoder[T, PrepareRow, Session], uid: String) extends Planter[T, PrepareRow, Session] {
   // This is the equivalent of InjectableEagerPlanterExpr's 'inject' method only for dynamic batch queries
   // TODO Try changing to Any => T and see if exceptions happen anywhere
   def withInject(element: Any) = EagerPlanter[T, PrepareRow, Session](inject.asInstanceOf[Any => T](element), encoder, uid)

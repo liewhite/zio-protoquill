@@ -25,7 +25,7 @@ trait GenericDecoder[ResultRow, Session, T, +DecType <: DecodingType] extends ((
 }
 
 trait GenericRowTyper[ResultRow, Co] {
-  def apply(rr: ResultRow): ClassTag[_]
+  def apply(rr: ResultRow): ClassTag[?]
 }
 
 object Summon {
@@ -35,7 +35,7 @@ object Summon {
       case Some(nullChecker) => '{ $nullChecker($index, $resultRow) }
       case None              =>
         // TODO Maybe check the session type and based on what it is, say "Cannot summon a JDBC null-chercker..."
-        report.throwError(s"Cannot find a null-checker for the session type ${Format.TypeOf[Session]} (whose result-row type is: ${Format.TypeOf[ResultRow]})")
+        report.errorAndAbort(s"Cannot find a null-checker for the session type ${Format.TypeOf[Session]} (whose result-row type is: ${Format.TypeOf[ResultRow]})")
     }
   }
 
@@ -55,7 +55,7 @@ object Summon {
     decoder[ResultRow, Session, T](index, resultRow, session) match {
       case Some(value) => value
       case None =>
-        report.throwError(s"Cannot find decoder for the type: ${Format.TypeOf[T]}")
+        report.errorAndAbort(s"Cannot find decoder for the type: ${Format.TypeOf[T]}")
     }
   }
 } // end Summon
@@ -74,7 +74,7 @@ object GenericDecoder {
   // it will be Decoder[String](1 /*column-index*/) given that our row-data is Row("Joe", 123).
   // Alternatively, if the element we are traversing in `flatten` is a product it will be:
   // the Person-constructor i.e. `new Person("Joe", 123)`
-  case class FlattenData(tpe: Type[_], decodedExpr: Expr[_], nullCheckerExpr: Expr[Boolean], index: Int)
+  case class FlattenData(tpe: Type[?], decodedExpr: Expr[?], nullCheckerExpr: Expr[Boolean], index: Int)
 
   @tailrec
   def flatten[ResultRow: Type, Session: Type, Fields: Type, Types: Type](
@@ -120,7 +120,7 @@ object GenericDecoder {
 
       case (_, '[EmptyTuple]) => accum
 
-      case _ => report.throwError("Cannot Derive Product during Type Flattening of Expression:\n" + typesTup)
+      case _ => report.errorAndAbort("Cannot Derive Product during Type Flattening of Expression:\n" + typesTup)
     }
   } // end flatten
 
@@ -145,7 +145,7 @@ object GenericDecoder {
         values[ResultRow, Session, types](nextIndex, baseIndex, resultRow, session)(result +: accum)
       case '[EmptyTuple] => accum
 
-      case typesTup => report.throwError("Cannot Derive Product during Values extraction:\n" + typesTup)
+      case typesTup => report.errorAndAbort("Cannot Derive Product during Values extraction:\n" + typesTup)
     }
   } // end values
 
@@ -223,7 +223,7 @@ object GenericDecoder {
 
   private def isBuiltInType[T: Type](using Quotes) = {
     import quotes.reflect._
-    isOption[T] || (TypeRepr.of[T] <:< TypeRepr.of[Seq[_]])
+    isOption[T] || (TypeRepr.of[T] <:< TypeRepr.of[Seq[?]])
   }
 
   def decode[T: Type, ResultRow: Type, Session: Type](index: Int, baseIndex: Expr[Int], resultRow: Expr[ResultRow], session: Expr[Session], overriddenIndex: Option[Expr[Int]] = None)(using Quotes): FlattenData = {
@@ -242,7 +242,7 @@ object GenericDecoder {
       } else {
         val flattenData = values[ResultRow, Session, T](index, baseIndex, resultRow, session)().reverse
         val elementTerms = flattenData.map(_.decodedExpr) // expressions that represent values for tuple elements
-        val constructed = '{ scala.runtime.Tuples.fromArray(${ Varargs(elementTerms) }.toArray[Any](Predef.summon[ClassTag[Any]]).asInstanceOf[Array[Object]]).asInstanceOf[T] }
+        val constructed = '{ scala.runtime.Tuples.fromArray(${ Varargs(elementTerms) }.toArray[Any](using Predef.summon[ClassTag[Any]]).asInstanceOf[Array[Object]]).asInstanceOf[T] }
         val nullChecks = flattenData.map(_._3).reduce((a, b) => '{ $a || $b })
         FlattenData(Type.of[T], constructed, nullChecks, flattenData.last.index)
       }
@@ -268,10 +268,10 @@ object GenericDecoder {
                   val children = flatten(index, baseIndex, resultRow, session)(Type.of[elementLabels], Type.of[elementTypes]).reverse
                   decodeProduct[T](children, m)
 
-                case _ => report.throwError(s"Decoder for ${Format.TypeOf[T]} could not be summoned. It has no decoder and is not a recognized Product or Sum type.")
+                case _ => report.errorAndAbort(s"Decoder for ${Format.TypeOf[T]} could not be summoned. It has no decoder and is not a recognized Product or Sum type.")
               } // end match
             case _ =>
-              report.throwError(s"No Decoder found for ${Format.TypeOf[T]} and it is not a class representing a group of columns")
+              report.errorAndAbort(s"No Decoder found for ${Format.TypeOf[T]} and it is not a class representing a group of columns")
           } // end match
       } // end match
     }
@@ -323,7 +323,7 @@ object DecodeSum {
   }
 
   /** Find a type from a coproduct type that matches a given ClassTag, if it matches, summon a decoder for it and decode it */
-  def selectMatchingElementAndDecode[Types: Type, ResultRow: Type, Session: Type, T: Type](index: Int, rawIndex: Expr[Int], resultRow: Expr[ResultRow], session: Expr[Session], rowTypeClassTag: Expr[ClassTag[_]])(typesTup: Type[Types])(using
+  def selectMatchingElementAndDecode[Types: Type, ResultRow: Type, Session: Type, T: Type](index: Int, rawIndex: Expr[Int], resultRow: Expr[ResultRow], session: Expr[Session], rowTypeClassTag: Expr[ClassTag[?]])(typesTup: Type[Types])(using
       Quotes
   ): FlattenData = {
     import quotes.reflect._
@@ -334,7 +334,7 @@ object DecodeSum {
         val possibleElementClass =
           Expr.summon[ClassTag[tpe]] match {
             case Some(cls) => '{ $cls.runtimeClass }
-            case None      => report.throwError(s"Cannot summon a ClassTag for the type ${Format.TypeOf[tpe]}")
+            case None      => report.errorAndAbort(s"Cannot summon a ClassTag for the type ${Format.TypeOf[tpe]}")
           }
 
         // Co-product element may be a product e.g:
@@ -375,7 +375,7 @@ object DecodeSum {
 } // end DecodeSum
 
 object ConstructDecoded {
-  def apply[T: Type](types: List[Type[_]], terms: List[Expr[_]], m: Expr[Mirror.ProductOf[T]])(using Quotes) = {
+  def apply[T: Type](types: List[Type[?]], terms: List[Expr[?]], m: Expr[Mirror.ProductOf[T]])(using Quotes) = {
     import quotes.reflect._
     // Get the constructor
     val tpe = TypeRepr.of[T]

@@ -54,7 +54,7 @@ object ExtractLifts {
       .collect {
         case expr: Pluckable => expr
         case Pointable(expr) =>
-          report.throwError(s"Invalid runtime Quotation: ${expr.show}. Cannot extract a unique identifier.", expr)
+          report.errorAndAbort(s"Invalid runtime Quotation: ${expr.show}. Cannot extract a unique identifier.", expr)
       }
       .distinctBy(_.uid)
       .map(_.pluck)
@@ -103,19 +103,19 @@ object QuoteMacro {
       val (newAst, transformer) = Transform(List())(ast)
       val extracted = transformer.state.reverse
       val quotations =
-        extracted.map {
-          case Extractee(uid, Dynamic(value, quat)) =>
-            val quotation =
-              value match {
-                case expr: Expr[_] if (is[Quoted[_]](expr)) =>
-                  expr.asExprOf[Quoted[_]]
-                case expr: Expr[_] =>
-                  report.throwError(s"Dynamic value has invalid expression: ${Format.Expr(expr)} in the AST:\n${printAstWithCustom(newAst)(uid, "<INVALID-HERE>")}")
-                case other =>
-                  report.throwError(s"Dynamic value is not an expression: ${other} in the AST:\n${printAstWithCustom(newAst)(uid, "<INVALID-HERE>")}")
-              }
+        extracted.map { (extractee: Extractee) =>
+          val Extractee(uid, Dynamic(value, quat)) = extractee: @unchecked
+          val quotation =
+            value match {
+              case expr: Expr[_] if (is[Quoted[?]](expr)) =>
+                expr.asExprOf[Quoted[?]]
+              case expr: Expr[_] =>
+                report.errorAndAbort(s"Dynamic value has invalid expression: ${Format.Expr(expr)} in the AST:\n${printAstWithCustom(newAst)(uid, "<INVALID-HERE>")}")
+              case other =>
+                report.errorAndAbort(s"Dynamic value is not an expression: ${other} in the AST:\n${printAstWithCustom(newAst)(uid, "<INVALID-HERE>")}")
+            }
 
-            '{ QuotationVase($quotation, ${ Expr(uid) }) }
+          '{ QuotationVase($quotation, ${ Expr(uid) }) }
         }
 
       (newAst, quotations)

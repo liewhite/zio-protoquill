@@ -16,14 +16,14 @@ object DeserializeAstInstances {
     import io.getquill.parser.Lifter
     import io.getquill.metaprog.Extractors._
 
-    def isQuat(expr: Expr[_]) =
+    def isQuat(expr: Expr[?]) =
       expr.asTerm.tpe <:< TypeRepr.of[io.getquill.quat.Quat]
 
     val exprMatch = new SerialHelper.Ast.Expr[io.getquill.ast.Ast]
 
     class CustomExprMap extends ExprMap {
       def transform[TF](expr: Expr[TF])(using Type[TF])(using Quotes): Expr[TF] =
-        expr match {
+        (expr: @unchecked) match {
           case exprMatch(ast) =>
             try {
               val astExpr = Lifter.NotSerializing.liftAst(ast)
@@ -40,6 +40,7 @@ object DeserializeAstInstances {
           case _ if (isQuat(expr)) => expr
 
           // Otherwise blows up and claims it can type Seq[Stuff] as _*
+          // Note: Varargs pattern match warning is suppressed at whole match level
           case v @ Varargs(args) =>
             Try {
               val mappedArgs = args.map(arg => transformChildren(arg))
@@ -76,7 +77,7 @@ object ExprAccumulate {
       override def transformChildren[TF](expr: Expr[TF])(using Type[TF])(using Quotes): Expr[TF] = {
         try {
           // If it is a Quat we immediately know it's not a Uprootable (i.e. we have gone too far down the chain)
-          expr match {
+          (expr: @unchecked) match {
             // Skip any dynamic infixes, we will extract uprootables from their parts separately
             // in particular see PrepareDynamicInfix where we go through the parts of an infix
             // and extract their contents. If we don't do this than in a situation where you have a dynamic
@@ -118,7 +119,7 @@ object ExprAccumulate {
         }
       }
 
-      def isQuat(expr: Expr[_]) =
+      def isQuat(expr: Expr[?]) =
         expr.asTerm.tpe <:< TypeRepr.of[io.getquill.quat.Quat]
 
       def transform[TF](expr: Expr[TF])(using Type[TF])(using Quotes): Expr[TF] = {

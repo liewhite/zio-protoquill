@@ -38,7 +38,7 @@ object QuatPicklers {
 
   implicit val quatProductPickler: Pickler[Quat] =
     compositePickler[Quat]
-      .addConcreteType[Quat.Product](productPickler, scala.reflect.classTag[Quat.Product])
+      .addConcreteType[Quat.Product](using productPickler, scala.reflect.classTag[Quat.Product])
       .addConcreteType[Quat.Generic.type]
       .addConcreteType[Quat.Unknown.type]
       .addConcreteType[Quat.Value.type]

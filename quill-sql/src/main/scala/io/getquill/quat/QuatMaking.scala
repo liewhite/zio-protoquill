@@ -86,7 +86,7 @@ trait QuatMaking extends QuatMakingBase {
         // Question: Should we pass in PrepareRow as well in order to have things be possibly products
         // in one dialect and values in another???
         case '[t] =>
-          (Expr.summon[GenericEncoder[t, _, _]], Expr.summon[GenericDecoder[_, _, t, DecodingType.Specific]]) match {
+          (Expr.summon[GenericEncoder[t, ?, ?]], Expr.summon[GenericDecoder[?, ?, t, DecodingType.Specific]]) match {
             case (Some(_), Some(_)) => true
             case (Some(enc), None) =>
               if (ProtoMessages.aggressiveQuatChecking)
@@ -118,7 +118,7 @@ trait QuatMaking extends QuatMakingBase {
     val output = QuatMaking.lookupIsEncodeable(tpe.widen)(encoderComputation)
     output
   }
-//quotes.reflect.report.throwError(s"No type for: ${tpe}")
+//quotes.reflect.report.errorAndAbort(s"No type for: ${tpe}")
 } // end QuatMaking
 
 trait QuatMakingBase {
@@ -141,7 +141,7 @@ trait QuatMakingBase {
       QuatMaking.lookupCache(tpe.widen)(() => ParseType.parseTopLevelType(tpe))
 
     def nonGenericMethods(using Quotes)(tpe: quotes.reflect.TypeRepr) =
-      tpe.classSymbol.get.memberFields
+      tpe.classSymbol.get.fieldMembers
         .filter(m => m.owner.name.toString != "Any" && m.owner.name.toString != "Object").map { param =>
           (
             param.name.toString,
@@ -213,7 +213,7 @@ trait QuatMakingBase {
       def unapply(using Quotes)(tpe: quotes.reflect.TypeRepr): Option[quotes.reflect.TypeRepr] = {
         import quotes.reflect._
         // [Option[t]]  will yield 'Nothing if is pulled out of a non optional value'
-        if (tpe.is[Option[_]])
+        if (tpe.is[Option[?]])
           tpe.asType match {
             case '[Option[t]] =>
               Some(TypeRepr.of[t])
@@ -227,7 +227,7 @@ trait QuatMakingBase {
     object Deoption {
       def unapply(using Quotes)(tpe: quotes.reflect.TypeRepr): Option[quotes.reflect.TypeRepr] = {
         import quotes.reflect._
-        if (isType[Option[_]](tpe))
+        if (isType[Option[?]](tpe))
           tpe.asType match {
             case '[Option[t]] => Some(TypeRepr.of[t])
             case _            => Some(tpe)
@@ -460,7 +460,7 @@ trait QuatMakingBase {
         val tpe = tpeRepr.widen.asType
         tpe match {
           // Skip optional types, they have a special case
-          case _ if (tpeRepr <:< TypeRepr.of[Option[_]]) =>
+          case _ if (tpeRepr <:< TypeRepr.of[Option[?]]) =>
             None
           // Only allow coproducts that are enums or sealed traits
           case _ if !isSealedTraitOrEnum(tpeRepr.widen) =>
@@ -469,7 +469,7 @@ trait QuatMakingBase {
             val typedTpe = tpe.asInstanceOf[Type[t]]
             computeCoproduct[t](using typedTpe)
           case _ =>
-            report.throwError(s"Could not match on type: ${tpe}")
+            report.errorAndAbort(s"Could not match on type: ${tpe}")
         }
       }
 
@@ -482,7 +482,7 @@ trait QuatMakingBase {
                 case CaseClassType(quat) => quat
                 case ValueType(quat)     => quat
                 case _ =>
-                  report.throwError(
+                  report.errorAndAbort(
                     s"The Co-Product element ${TypeRepr.of[tpe].show} was not a Case Class or Value Type. Value-level " +
                       s"Co-Products are not supported. Please write a decoder for it's parent-type ${parent.show}."
                   )
@@ -528,7 +528,7 @@ trait QuatMakingBase {
     object QueryType {
       def unapply(using Quotes)(tpe: quotes.reflect.TypeRepr) = {
         import quotes.reflect._
-        if (isType[Query[_]](tpe))
+        if (isType[Query[?]](tpe))
           tpe.asType match {
             case '[Query[t]] =>
               val out = TypeRepr.of[t]

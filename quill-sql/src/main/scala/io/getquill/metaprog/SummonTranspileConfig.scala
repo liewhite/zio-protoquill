@@ -60,25 +60,25 @@ object SummonTranspileConfig {
     }
   }
 
-  def findHListMembers(baseExpr: Expr[_], typeMemberName: String)(using Quotes): List[quotes.reflect.TypeRepr] = {
+  def findHListMembers(baseExpr: Expr[?], typeMemberName: String)(using Quotes): List[quotes.reflect.TypeRepr] = {
     import quotes.reflect._
-    val memberSymbol = baseExpr.asTerm.tpe.termSymbol.memberType(typeMemberName)
+    val memberSymbol = baseExpr.asTerm.tpe.termSymbol.typeMember(typeMemberName)
     val hlistType = baseExpr.asTerm.select(memberSymbol).tpe.widen
     val extractedTypes = recurseConfigList(hlistType.asType)
     extractedTypes.map { case '[t] => TypeRepr.of[t] }.toList
   }
 
-  private def parseSealedTraitClassName(cls: Class[_]) =
+  private def parseSealedTraitClassName(cls: Class[?]) =
     cls.getName.stripSuffix("$").replaceFirst("(.*)[\\.$]", "")
 
-  private def recurseConfigList(listMember: Type[_])(using Quotes): List[Type[_]] = {
+  private def recurseConfigList(listMember: Type[?])(using Quotes): List[Type[?]] = {
     import quotes.reflect._
     listMember match {
       case '[HNil] => Nil
       case '[head :: tail] =>
         Type.of[head] :: recurseConfigList(Type.of[tail])
       case _ =>
-        report.throwError(s"Invalid config list member type: ${Format.Type(listMember)}. Need to be either :: or HNil types.")
+        report.errorAndAbort(s"Invalid config list member type: ${Format.Type(listMember)}. Need to be either :: or HNil types.")
     }
   }
 

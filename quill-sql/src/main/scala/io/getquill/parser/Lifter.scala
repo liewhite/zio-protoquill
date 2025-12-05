@@ -321,7 +321,6 @@ case class Lifter(serializeQuat: SerializeQuat, serializeAst: SerializeAst) exte
       case a: Assignment                                             => liftAssignment(a)
       case a: AssignmentDual                                         => liftAssignmentDual(a)
       case a: Action                                                 => liftAction(a)
-      case v: Entity                                                 => liftEntity(v)
       case v: Tuple                                                  => liftTuple(v)
       case v: CaseClass                                              => liftCaseClass(v)
       case v: Ordering                                               => orderingLiftable(v)

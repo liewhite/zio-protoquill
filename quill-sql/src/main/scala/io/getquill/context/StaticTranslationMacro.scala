@@ -113,10 +113,10 @@ object StaticTranslationMacro {
    * sure that that only needed lifts are used and in the right order.
    */
   private[getquill] def processLifts(
-      lifts: List[PlanterExpr[_, _, _]],
+      lifts: List[PlanterExpr[?, ?, ?]],
       matchingExternals: List[External],
-      secondaryLifts: List[PlanterExpr[_, _, _]] = List()
-  )(using Quotes): Either[String, (List[PlanterExpr[_, _, _]], List[PlanterExpr[_, _, _]])] = {
+      secondaryLifts: List[PlanterExpr[?, ?, ?]] = List()
+  )(using Quotes): Either[String, (List[PlanterExpr[?, ?, ?]], List[PlanterExpr[?, ?, ?]])] = {
     import quotes.reflect.report
 
     val encodeablesMap =
@@ -235,7 +235,7 @@ object StaticTranslationMacro {
           case s: Some[T] => s
           case None =>
             if (HasDynamicSplicingHint.fail)
-              report.throwError(str)
+              report.errorAndAbort(str)
             else {
               if (io.getquill.util.Messages.tracesEnabled(TraceType.Standard))
                 println(s"[StaticTranslationError] ${str}")
@@ -251,7 +251,7 @@ object StaticTranslationMacro {
           case Left(errorStr) =>
             val msg = str + errorStr
             if (HasDynamicSplicingHint.fail)
-              report.throwError(msg)
+              report.errorAndAbort(msg)
             else {
               if (io.getquill.util.Messages.tracesEnabled(TraceType.Standard))
                 println(s"[StaticTranslationError] ${msg}")

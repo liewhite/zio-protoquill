@@ -274,7 +274,7 @@ class BlockParser(val rootParse: Parser)(using Quotes, TranspileConfig)
           case ValDefTerm(ast) => ast
           case other           =>
             // TODO Better site-description in error (does other.show work?)
-            report.throwError(s"Illegal statement ${other.show} in block ${block.show}")
+            report.errorAndAbort(s"Illegal statement ${other.show} in block ${block.show}")
         }
       val lastPartAst = rootParse(lastPart.asExpr)
       Block((partsAsts :+ lastPartAst))
@@ -348,7 +348,7 @@ class QuotationParser(rootParse: Parser)(using Quotes, TranspileConfig) extends 
       quotationLot match {
         case Uprootable(uid, astTree, _) => Unlifter(astTree)
         case Pluckable(uid, astTree, _)  => QuotationTag(uid)
-        case Pointable(quote)            => report.throwError(s"Quotation is invalid for compile-time or processing: ${quote.show}", quote)
+        case Pointable(quote)            => report.errorAndAbort(s"Quotation is invalid for compile-time or processing: ${quote.show}", quote)
       }
 
     case PlanterExpr.UprootableUnquote(expr) =>
@@ -370,7 +370,7 @@ class QuotationParser(rootParse: Parser)(using Quotes, TranspileConfig) extends 
 // All other kinds of things rejected
 class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
     extends Parser(rootParse)
-    with Parser.PrefilterType[Action[_]]
+    with Parser.PrefilterType[Action[?]]
     with Assignments
     with PropertyParser {
   import quotes.reflect.{Constant => TConstant, _}
@@ -401,12 +401,12 @@ class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
     // Form:    ( (Query[Perosn]).[action](....) ).returning[T]
     // Example: ( query[Person].insertValue(lift(joe))).returning[Something]
     case '{ ($action: Insert[t]).returning[r] } =>
-      report.throwError(s"A 'returning' clause must have arguments.")
+      report.errorAndAbort(s"A 'returning' clause must have arguments.")
     // NOTE: Need to make copies for Insert/Update/Delete because presently `Action` does not have a .returning method
     case '{ ($action: Update[t]).returning[r] } =>
-      report.throwError(s"A 'returning' clause must have arguments.")
+      report.errorAndAbort(s"A 'returning' clause must have arguments.")
     case '{ ($action: Delete[t]).returning[r] } =>
-      report.throwError(s"A 'returning' clause must have arguments.")
+      report.errorAndAbort(s"A 'returning' clause must have arguments.")
 
     case '{ ($action: Insert[t]).returning[r](${ Lambda1(id, tpe, body) }) } =>
       val ident = cleanIdent(id, tpe)
@@ -506,7 +506,7 @@ class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
    * (e.g. arrive as `r.bar, r.foo`). Use use the value/flatten methods in order to expand
    * the case-class out into fields.
    */
-  private def reprocessReturnClause(ident: AIdent, originalBody: Ast, action: Expr[_], actionType: Type[_]) =
+  private def reprocessReturnClause(ident: AIdent, originalBody: Ast, action: Expr[?], actionType: Type[?]) =
     (ident == originalBody, action.asTerm.tpe) match {
       case (true, IsActionType()) =>
         val newBody =
@@ -515,14 +515,14 @@ class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
           }
         newBody
       case (true, _) =>
-        report.throwError("Could not process whole-record 'returning' clause. Consider trying to return individual columns.")
+        report.errorAndAbort("Could not process whole-record 'returning' clause. Consider trying to return individual columns.")
       case _ =>
         originalBody
     }
 
   private object IsActionType {
     def unapply(term: TypeRepr): Boolean =
-      term <:< TypeRepr.of[Insert[_]] || term <:< TypeRepr.of[Update[_]] || term <:< TypeRepr.of[Delete[_]]
+      term <:< TypeRepr.of[Insert[?]] || term <:< TypeRepr.of[Update[?]] || term <:< TypeRepr.of[Delete[?]]
   }
 
 } // end ActionParser
@@ -531,12 +531,12 @@ class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
 // All other kinds of things rejected
 class BatchActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
     extends Parser(rootParse)
-    with Parser.PrefilterType[BatchAction[_]]
+    with Parser.PrefilterType[BatchAction[?]]
     with Assignments {
   import quotes.reflect.{Constant => TConstant, _}
 
   def attempt = {
-    case '{ type a <: Action[_] with QAC[_, _]; ($q: Query[t]).foreach[`a`, b](${ Lambda1(ident, tpe, body) })($unq) } =>
+    case '{ type a <: Action[_] & QAC[_, _]; ($q: Query[t]).foreach[`a`, b](${ Lambda1(ident, tpe, body) })(using $unq) } =>
       val id = cleanIdent(ident, tpe)
       Foreach(rootParse(q), id, rootParse(body))
   }
@@ -563,10 +563,6 @@ class OptionParser(rootParse: Parser)(using Quotes, TranspileConfig) extends Par
   import MatchingOptimizers._
   import extras._
 
-  extension (quat: Quat) {
-    def isProduct = quat.isInstanceOf[Quat.Product]
-  }
-
   /**
    * Note: The -->, -@> etc.. clauses are just to optimize the match by doing an early-exit if possible.
    * they don't actaully do any application-relevant logic
@@ -581,7 +577,7 @@ class OptionParser(rootParse: Parser)(using Quotes, TranspileConfig) extends Par
     case "isDefined" --> '{ ($o: Option[t]).isDefined } =>
       OptionIsDefined(rootParse(o))
 
-    case "flatten" -@> '{ ($o: Option[t]).flatten($impl) } =>
+    case "flatten" -@> '{ ($o: Option[t]).flatten(using $impl) } =>
       OptionFlatten(rootParse(o))
 
     case "map" -@> '{ ($o: Option[t]).map(${ Lambda1(id, idType, body) }) } =>
@@ -611,7 +607,7 @@ class OptionParser(rootParse: Parser)(using Quotes, TranspileConfig) extends Par
     case "contains" -@> '{ type t; ($o: Option[`t`]).contains($body: `t`) } =>
       OptionContains(rootParse(o), rootParse(body))
 
-    case '{ ($o: Option[t]).orNull($refl) } =>
+    case '{ ($o: Option[t]).orNull(using $refl) } =>
       OptionOrNull(rootParse(o))
 
     case '{ ($o: Option[t]).getOrNull } =>
@@ -620,7 +616,7 @@ class OptionParser(rootParse: Parser)(using Quotes, TranspileConfig) extends Par
     case '{ ($o: Option[t]).filterIfDefined(${ Lambda1(id, idType, body) }) } =>
       val queryAst = rootParse(o)
       if (queryAst.quat.isProduct)
-        report.throwError("filterIfDefined only allowed on individual columns, not on case classes or tuples.")
+        report.errorAndAbort("filterIfDefined only allowed on individual columns, not on case classes or tuples.")
       else
         FilterIfDefined(queryAst, cleanIdent(id, idType), rootParse(body))
   }
@@ -630,13 +626,13 @@ class OptionParser(rootParse: Parser)(using Quotes, TranspileConfig) extends Par
 // All other kinds of things rejected
 class QueryParser(val rootParse: Parser)(using Quotes, TranspileConfig)
     extends Parser(rootParse)
-    with Parser.PrefilterType[Query[_]]
+    with Parser.PrefilterType[Query[?]]
     with PropertyAliases
     with Helpers {
   import quotes.reflect.{Constant => TConstant, Ident => TIdent, _}
   import MatchingOptimizers._
 
-  private def warnVerifyNoBranches(v: VerifyNoBranches.Output, expr: Expr[_]): Unit =
+  private def warnVerifyNoBranches(v: VerifyNoBranches.Output, expr: Expr[?]): Unit =
     if (v.messages.nonEmpty)
       report.warning("Questionable row-class found.\n" + v.messages.map(_.msg).mkString("\n"), expr)
 
@@ -665,20 +661,20 @@ class QueryParser(val rootParse: Parser)(using Quotes, TranspileConfig)
     case "withFilter" -@> '{ ($q: Query[qt]).withFilter(${ Lambda1(ident, tpe, body) }) } =>
       Filter(rootParse(q), cleanIdent(ident, tpe), rootParse(body))
 
-    case "concatMap" -@@> '{ type t1; type t2; ($q: Query[qt]).concatMap[`t1`, `t2`](${ Lambda1(ident, tpe, body) })($unknown_stuff) } => // ask Alex why is concatMap like this? what's unkonwn_stuff?
+    case "concatMap" -@@> '{ type t1; type t2; ($q: Query[qt]).concatMap[`t1`, `t2`](${ Lambda1(ident, tpe, body) })(using $unknown_stuff) } => // ask Alex why is concatMap like this? what's unkonwn_stuff?
       ConcatMap(rootParse(q), cleanIdent(ident, tpe), rootParse(body))
 
     case "union" -@> '{ ($a: Query[t]).union($b) }       => Union(rootParse(a), rootParse(b))
     case "unionAll" -@> '{ ($a: Query[t]).unionAll($b) } => UnionAll(rootParse(a), rootParse(b))
     case "++" -@> '{ ($a: Query[t]).++($b) }             => UnionAll(rootParse(a), rootParse(b))
 
-    case ("join" -@> '{ type t1; type t2; ($q1: Query[`t1`]).join[`t1`, `t2`](($q2: Query[`t2`])) }) withOnClause(OnClause(ident1, tpe1, ident2, tpe2, on)) =>
+    case ("join" -@> '{ type t1; type t2; ($q1: Query[`t1`]).join[`t1`, `t2`](($q2: Query[`t2`])) }) `withOnClause`(OnClause(ident1, tpe1, ident2, tpe2, on)) =>
       Join(InnerJoin, rootParse(q1), rootParse(q2), cleanIdent(ident1, tpe1), cleanIdent(ident2, tpe2), rootParse(on))
-    case ("leftJoin" -@> '{ type t1; type t2; ($q1: Query[`t1`]).leftJoin[`t1`, `t2`](($q2: Query[`t2`])) }) withOnClause(OnClause(ident1, tpe1, ident2, tpe2, on)) =>
+    case ("leftJoin" -@> '{ type t1; type t2; ($q1: Query[`t1`]).leftJoin[`t1`, `t2`](($q2: Query[`t2`])) }) `withOnClause`(OnClause(ident1, tpe1, ident2, tpe2, on)) =>
       Join(LeftJoin, rootParse(q1), rootParse(q2), cleanIdent(ident1, tpe1), cleanIdent(ident2, tpe2), rootParse(on))
-    case ("rightJoin" -@> '{ type t1; type t2; ($q1: Query[`t1`]).rightJoin[`t1`, `t2`](($q2: Query[`t2`])) }) withOnClause(OnClause(ident1, tpe1, ident2, tpe2, on)) =>
+    case ("rightJoin" -@> '{ type t1; type t2; ($q1: Query[`t1`]).rightJoin[`t1`, `t2`](($q2: Query[`t2`])) }) `withOnClause`(OnClause(ident1, tpe1, ident2, tpe2, on)) =>
       Join(RightJoin, rootParse(q1), rootParse(q2), cleanIdent(ident1, tpe1), cleanIdent(ident2, tpe2), rootParse(on))
-    case ("fullJoin" -@> '{ type t1; type t2; ($q1: Query[`t1`]).fullJoin[`t1`, `t2`](($q2: Query[`t2`])) }) withOnClause(OnClause(ident1, tpe1, ident2, tpe2, on)) =>
+    case ("fullJoin" -@> '{ type t1; type t2; ($q1: Query[`t1`]).fullJoin[`t1`, `t2`](($q2: Query[`t2`])) }) `withOnClause`(OnClause(ident1, tpe1, ident2, tpe2, on)) =>
       Join(FullJoin, rootParse(q1), rootParse(q2), cleanIdent(ident1, tpe1), cleanIdent(ident2, tpe2), rootParse(on))
 
     case "join" -@> '{ type t1; ($q1: Query[`t1`]).join[`t1`](${ Lambda1(ident1, tpe, on) }) } =>
@@ -690,7 +686,7 @@ class QueryParser(val rootParse: Parser)(using Quotes, TranspileConfig)
     case "drop" -@> '{ type t; ($q: Query[`t`]).drop($n: Int) } => Drop(rootParse(q), rootParse(n))
 
     // 2-level so we don't care to select-apply it now
-    case "sortBy" -@@> '{ type r; ($q: Query[t]).sortBy[`r`](${ Lambda1(ident1, tpe, body) })($ord: Ord[`r`]) } =>
+    case "sortBy" -@@> '{ type r; ($q: Query[t]).sortBy[`r`](${ Lambda1(ident1, tpe, body) })(using $ord: Ord[`r`]) } =>
       SortBy(rootParse(q), cleanIdent(ident1, tpe), rootParse(body), rootParse(ord))
 
     case "groupBy" -@> '{ type r; ($q: Query[t]).groupBy[`r`](${ Lambda1(ident1, tpe, body) }) } =>
@@ -719,7 +715,7 @@ class QueryParser(val rootParse: Parser)(using Quotes, TranspileConfig)
   }
 
   def failFlatJoin(clauseName: String) =
-    report.throwError(
+    report.errorAndAbort(
       s"""
         |The .${clauseName} cannot be placed after a join clause in a for-comprehension. Put it before.
         |For example. Change:
@@ -730,9 +726,9 @@ class QueryParser(val rootParse: Parser)(using Quotes, TranspileConfig)
 
   import io.getquill.JoinQuery
 
-  private case class OnClause(ident1: String, tpe1: quotes.reflect.TypeRepr, ident2: String, tpe2: quotes.reflect.TypeRepr, on: quoted.Expr[_])
+  private case class OnClause(ident1: String, tpe1: quotes.reflect.TypeRepr, ident2: String, tpe2: quotes.reflect.TypeRepr, on: quoted.Expr[?])
   private object withOnClause {
-    def unapply(jq: Expr[_]) =
+    def unapply(jq: Expr[?]) =
       jq match {
         case '{ ($q: JoinQuery[a, b, r]).on(${ Lambda2(ident1, tpe1, ident2, tpe2, on) }) } =>
           Some((UntypeExpr(q), OnClause(ident1, tpe1, ident2, tpe2, on)))
@@ -773,17 +769,17 @@ class QueryScalarsParser(val rootParse: Parser)(using Quotes) extends Parser(roo
     case '{ type t; type u >: `t`; ($q: Query[`t`]).value[`u`] }   => rootParse(q)
     case '{ type t; type u >: `t`; ($q: Query[`t`]).min[`u`] }     => Aggregation(AggregationOperator.`min`, rootParse(q))
     case '{ type t; type u >: `t`; ($q: Query[`t`]).max[`u`] }     => Aggregation(AggregationOperator.`max`, rootParse(q))
-    case '{ type t; type u >: `t`; ($q: Query[`t`]).avg[`u`]($n) } => Aggregation(AggregationOperator.`avg`, rootParse(q))
-    case '{ type t; type u >: `t`; ($q: Query[`t`]).sum[`u`]($n) } => Aggregation(AggregationOperator.`sum`, rootParse(q))
+    case '{ type t; type u >: `t`; ($q: Query[`t`]).avg[`u`](using $n) } => Aggregation(AggregationOperator.`avg`, rootParse(q))
+    case '{ type t; type u >: `t`; ($q: Query[`t`]).sum[`u`](using $n) } => Aggregation(AggregationOperator.`sum`, rootParse(q))
     case '{ type t; ($q: Query[`t`]).size }                        => Aggregation(AggregationOperator.`size`, rootParse(q))
 
     case '{ type t; type u >: `t`; min[`u`]($q) }                  => Aggregation(AggregationOperator.`min`, rootParse(q))
     case '{ type t; type u >: `t`; max[`u`]($q) }                  => Aggregation(AggregationOperator.`max`, rootParse(q))
     case '{ type t; type u >: `t`; count[`u`]($q) }                => Aggregation(AggregationOperator.`size`, rootParse(q))
-    case '{ type t; type u >: `t`; avg[`u`]($q: Option[`u`])($n) } => Aggregation(AggregationOperator.`avg`, rootParse(q))
-    case '{ type t; type u >: `t`; sum[`u`]($q: Option[`u`])($n) } => Aggregation(AggregationOperator.`sum`, rootParse(q))
-    case '{ type t; type u >: `t`; avg[`u`]($q: `u`)($n) }         => Aggregation(AggregationOperator.`avg`, rootParse(q))
-    case '{ type t; type u >: `t`; sum[`u`]($q: `u`)($n) }         => Aggregation(AggregationOperator.`sum`, rootParse(q))
+    case '{ type t; type u >: `t`; avg[`u`]($q: Option[`u`])(using $n) } => Aggregation(AggregationOperator.`avg`, rootParse(q))
+    case '{ type t; type u >: `t`; sum[`u`]($q: Option[`u`])(using $n) } => Aggregation(AggregationOperator.`sum`, rootParse(q))
+    case '{ type t; type u >: `t`; avg[`u`]($q: `u`)(using $n) }         => Aggregation(AggregationOperator.`avg`, rootParse(q))
+    case '{ type t; type u >: `t`; sum[`u`]($q: `u`)(using $n) }         => Aggregation(AggregationOperator.`sum`, rootParse(q))
   }
 
 }
@@ -801,7 +797,7 @@ class InfixParser(val rootParse: Parser)(using Quotes, TranspileConfig) extends 
     case '{ ($i: InfixValue) }                        => genericInfix(i)(false, false, Quat.Value)
   }
 
-  def genericInfix(i: Expr[_])(isPure: Boolean, isTransparent: Boolean, quat: Quat)(using History) = {
+  def genericInfix(i: Expr[?])(isPure: Boolean, isTransparent: Boolean, quat: Quat)(using History) = {
     val (parts, paramsExprs) = InfixComponentsOrFail.unapply(i).getOrElse { failParse(i, classOf[Infix]) }
     if (parts.exists(_.endsWith("#"))) {
       PrepareDynamicInfix(parts.toList, paramsExprs.toList)(isPure, isTransparent, quat)
@@ -918,7 +914,7 @@ class ExtrasParser(val rootParse: Parser)(using Quotes, TranspileConfig) extends
   }
 
   private object ExtrasMethod {
-    def unapply(expr: Expr[_]): Option[(Term, String, Term)] =
+    def unapply(expr: Expr[?]): Option[(Term, String, Term)] =
       expr.asTerm match {
         case Apply(
               Apply(
@@ -950,7 +946,7 @@ class OperationsParser(val rootParse: Parser)(using Quotes, TranspileConfig) ext
 
   // Handles named operations, ie Argument Operation Argument
   object NamedOp1 {
-    def unapply(expr: Expr[_]): Option[(Expr[_], String, Expr[_])] =
+    def unapply(expr: Expr[?]): Option[(Expr[?], String, Expr[?])] =
       UntypeExpr(expr) match {
         case Unseal(Apply(Select(Untype(left), op: String), Untype(right) :: Nil)) =>
           Some(left.asExpr, op, right.asExpr)
@@ -1052,10 +1048,10 @@ class OperationsParser(val rootParse: Parser)(using Quotes, TranspileConfig) ext
   //   import quotes.reflect._
   //   if (isPrimitive(tpe)) true
   //   else
-  //     report.throwError(s"Can only perform the operation `${opName}` on primitive types but found the type: ${Format.TypeRepr(tpe.widen)} (primitive types are: Int,Long,Short,Float,Double,Boolean,Char)")
+  //     report.errorAndAbort(s"Can only perform the operation `${opName}` on primitive types but found the type: ${Format.TypeRepr(tpe.widen)} (primitive types are: Int,Long,Short,Float,Double,Boolean,Char)")
 
   object NumericOperation {
-    def unapply(expr: Expr[_])(using History): Option[BinaryOperation] =
+    def unapply(expr: Expr[?])(using History): Option[BinaryOperation] =
       UntypeExpr(expr) match {
         case NamedOp1(left, NumericOpLabel(binaryOp), right) if (isNumeric(left.asTerm.tpe) && isNumeric(right.asTerm.tpe)) =>
           Some(BinaryOperation(rootParse(left), binaryOp, rootParse(right)))
@@ -1138,13 +1134,13 @@ class GenericExpressionsParser(val rootParse: Parser)(using Quotes, TranspileCon
 
   def attempt = {
     case expr @ ImplicitClassExtensionPattern(cls, constructorArg) =>
-      report.throwError(ImplicitClassExtensionPattern.errorMessage(expr, cls, constructorArg), expr)
+      report.errorAndAbort(ImplicitClassExtensionPattern.errorMessage(expr, cls, constructorArg), expr)
 
     case UncastSelectable('{ reflectiveSelectable($v).selectDynamic($propNameExpr) }) =>
       val propName =
         propNameExpr match {
           case Expr(v) => v
-          case _       => report.throwError(s"Cannot parse the property ${Format.Expr(propNameExpr)}. It was not a static string property.")
+          case _       => report.errorAndAbort(s"Cannot parse the property ${Format.Expr(propNameExpr)}. It was not a static string property.")
         }
       Property(rootParse(v), propName)
 
