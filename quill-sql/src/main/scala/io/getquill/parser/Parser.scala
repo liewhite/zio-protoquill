@@ -104,7 +104,7 @@ trait ParserLibrary extends ParserFactory {
 
 object ParserLibrary extends ParserLibrary {
   class ReadyParser private[parser] (parser: Parser) {
-    def apply(expr: Expr[_])(using Quotes, TranspileConfig) =
+    def apply(expr: Expr[?])(using Quotes, TranspileConfig) =
       parser(expr)(using History.Root)
   }
 }
@@ -320,7 +320,7 @@ class TraversableOperationParser(val rootParse: Parser)(using Quotes, TranspileC
 class OrderingParser(val rootParse: Parser)(using Quotes, TranspileConfig) extends Parser(rootParse) with PatternMatchingValues {
   import quotes.reflect._
 
-  def attempt: History ?=> PartialFunction[Expr[_], Ordering] = {
+  def attempt: History ?=> PartialFunction[Expr[?], Ordering] = {
     case '{ implicitOrd } => AscNullsFirst
 
     // Doing this on a lower level since there are multiple cases of Order.apply with multiple arguemnts
@@ -375,17 +375,17 @@ class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
     with PropertyParser {
   import quotes.reflect.{Constant => TConstant, _}
 
-  def combineAndCheckAndParse[T: Type, A <: Ast](first: Expr[T], others: Seq[Expr[T]])(checkClause: Expr[_] => Unit)(parseClause: Expr[_] => A): Seq[A] = {
+  def combineAndCheckAndParse[T: Type, A <: Ast](first: Expr[T], others: Seq[Expr[T]])(checkClause: Expr[?] => Unit)(parseClause: Expr[?] => A): Seq[A] = {
     val assignments = (first.asTerm +: others.map(_.asTerm).filterNot(isNil(_)))
     assignments.foreach(term => checkClause(term.asExpr))
     assignments.map(term => parseClause(term.asExpr))
   }
 
   def attempt = {
-    case '{ type t; ($query: EntityQueryModel[`t`]).insert(($first: `t` => (Any, Any)), (${ Varargs(others) }: Seq[`t` => (Any, Any)]): _*) } =>
+    case '{ type t; ($query: EntityQueryModel[`t`]).insert(($first: `t` => (Any, Any)), (${ Varargs(others) }: Seq[`t` => (Any, Any)])*) } =>
       val assignments = combineAndCheckAndParse(first, others)(AssignmentTerm.CheckTypes(_))(AssignmentTerm.OrFail(_))
       AInsert(rootParse(query), assignments.toList)
-    case '{ type t; ($query: EntityQueryModel[`t`]).update(($first: `t` => (Any, Any)), (${ Varargs(others) }: Seq[`t` => (Any, Any)]): _*) } =>
+    case '{ type t; ($query: EntityQueryModel[`t`]).update(($first: `t` => (Any, Any)), (${ Varargs(others) }: Seq[`t` => (Any, Any)])*) } =>
       val assignments = combineAndCheckAndParse(first, others)(AssignmentTerm.CheckTypes(_))(AssignmentTerm.OrFail(_))
       AUpdate(rootParse(query), assignments.toList)
     case '{ type t; ($query: EntityQueryModel[`t`]).delete } =>
@@ -430,7 +430,7 @@ class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
     case '{ ($action: Insert[t]).onConflictIgnore } =>
       OnConflict(rootParse(action), OnConflict.NoTarget, OnConflict.Ignore)
 
-    case '{ type t; ($action: Insert[`t`]).onConflictIgnore(($target: `t` => Any), (${ Varargs(targets) }: Seq[`t` => Any]): _*) } =>
+    case '{ type t; ($action: Insert[`t`]).onConflictIgnore(($target: `t` => Any), (${ Varargs(targets) }: Seq[`t` => Any])*) } =>
       val targetProperties = combineAndCheckAndParse(target, targets)(_ => ())(LambdaToProperty.OrFail(_))
       OnConflict(
         rootParse(action),
@@ -438,7 +438,7 @@ class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
         OnConflict.Ignore
       )
 
-    case '{ type t; ($action: Insert[`t`]).onConflictUpdate(($assign: (`t`, `t`) => (Any, Any)), (${ Varargs(assigns) }: Seq[(`t`, `t`) => (Any, Any)]): _*) } =>
+    case '{ type t; ($action: Insert[`t`]).onConflictUpdate(($assign: (`t`, `t`) => (Any, Any)), (${ Varargs(assigns) }: Seq[(`t`, `t`) => (Any, Any)])*) } =>
       val assignments = combineAndCheckAndParse(assign, assigns)(AssignmentTerm.CheckTypes(_))(AssignmentTerm.Double.OrFail(_))
       OnConflict(
         rootParse(action),
@@ -446,7 +446,7 @@ class ActionParser(val rootParse: Parser)(using Quotes, TranspileConfig)
         OnConflict.Update(assignments.toList)
       )
 
-    case '{ type t; ($action: Insert[`t`]).onConflictUpdate(($target: `t` => Any), (${ Varargs(targets) }: Seq[`t` => Any]): _*)(($assign: (`t`, `t`) => (Any, Any)), (${ Varargs(assigns) }: Seq[(`t`, `t`) => (Any, Any)]): _*) } =>
+    case '{ type t; ($action: Insert[`t`]).onConflictUpdate(($target: `t` => Any), (${ Varargs(targets) }: Seq[`t` => Any])*)(($assign: (`t`, `t`) => (Any, Any)), (${ Varargs(assigns) }: Seq[(`t`, `t`) => (Any, Any)])*) } =>
       val assignments = combineAndCheckAndParse(assign, assigns)(AssignmentTerm.CheckTypes(_))(AssignmentTerm.Double.OrFail(_))
       val targetProperties = combineAndCheckAndParse(target, targets)(_ => ())(LambdaToProperty.OrFail(_))
       OnConflict(
@@ -648,7 +648,7 @@ class QueryParser(val rootParse: Parser)(using Quotes, TranspileConfig)
       warnVerifyNoBranches(VerifyNoBranches.in(quat), expr)
       Entity(name, List(), quat)
 
-    case expr @ '{ querySchema[t](${ ConstExpr(name: String) }, ${ GenericSeq(properties) }: _*) } =>
+    case expr @ '{ querySchema[t](${ ConstExpr(name: String) }, ${ GenericSeq(properties) }*) } =>
       val quat = InferQuat.of[t].probit
       warnVerifyNoBranches(VerifyNoBranches.in(quat), expr)
       Entity.Opinionated(name, properties.toList.map(PropertyAliasExpr.OrFail[t](_)), quat, Renameable.Fixed)

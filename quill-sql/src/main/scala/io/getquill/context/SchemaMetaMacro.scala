@@ -18,7 +18,7 @@ object SchemaMetaMacro {
       (columns match {
         case GenericSeq(argsExprs) => argsExprs
       }).toList
-    val quote = QuoteMacro('{ querySchema[T]($entity, $columns: _*) })
+    val quote = QuoteMacro('{ querySchema[T]($entity, $columns*) })
     '{ SchemaMeta($quote, $uuid) }
   }
 }

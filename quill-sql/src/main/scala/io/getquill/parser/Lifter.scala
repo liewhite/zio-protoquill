@@ -151,9 +151,9 @@ case class Lifter(serializeQuat: SerializeQuat, serializeAst: SerializeAst) exte
     def lift = {
       case Quat.Product.WithRenamesCompact(name, tpe, fields, values, renamesFrom, renamesTo) =>
         '{
-          io.getquill.quat.Quat.Product.WithRenamesCompact.apply(${ name.expr }, ${ tpe.expr })(${ fields.toList.spliceVarargs }: _*)(${ values.toList.spliceVarargs }: _*)(${ renamesFrom.toList.spliceVarargs }: _*)(${
+          io.getquill.quat.Quat.Product.WithRenamesCompact.apply(${ name.expr }, ${ tpe.expr })(${ fields.toList.spliceVarargs }*)(${ values.toList.spliceVarargs }*)(${ renamesFrom.toList.spliceVarargs }*)(${
             renamesTo.toList.spliceVarargs
-          }: _*)
+          }*)
         }
     }
   }
@@ -166,9 +166,9 @@ case class Lifter(serializeQuat: SerializeQuat, serializeAst: SerializeAst) exte
     def typeTag = TType.of[Quat]
     def lift = {
       case Quat.Product.WithRenamesCompact(name, tpe, fields, values, renamesFrom, renamesTo) => '{
-          io.getquill.quat.Quat.Product.WithRenamesCompact.apply(${ name.expr }, ${ tpe.expr })(${ fields.toList.spliceVarargs }: _*)(${ values.toList.spliceVarargs }: _*)(${ renamesFrom.toList.spliceVarargs }: _*)(${
+          io.getquill.quat.Quat.Product.WithRenamesCompact.apply(${ name.expr }, ${ tpe.expr })(${ fields.toList.spliceVarargs }*)(${ values.toList.spliceVarargs }*)(${ renamesFrom.toList.spliceVarargs }*)(${
             renamesTo.toList.spliceVarargs
-          }: _*)
+          }*)
         }
       case Quat.Value             => '{ io.getquill.quat.Quat.Value }
       case Quat.Null              => '{ io.getquill.quat.Quat.Null }

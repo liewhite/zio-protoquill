@@ -19,7 +19,7 @@ object Row {
 }
 
 case class Row(elements: List[Row.Data]) {
-  private lazy val dataMap = LinkedHashMap(elements.map(d => (d.key, d.value)): _*)
+  private lazy val dataMap = LinkedHashMap(elements.map(d => (d.key, d.value))*)
 
   def data = elements.map(r => (r.key, r.value))
 

@@ -402,8 +402,8 @@ object Unlifter {
 
   given quatProductUnliftable: NiceUnliftable[Quat.Product] with {
     def unlift = {
-      case '{ Quat.Product.WithRenamesCompact.apply($name, $tpe)(${ Varargs(fields) }: _*)(${ Varargs(values) }: _*)(${ Varargs(renamesFrom) }: _*)(${ Varargs(renamesTo) }: _*) } =>
-        Quat.Product.WithRenamesCompact(name.unexpr, tpe.unexpr)(fields.unexprSeq: _*)(values.unexprSeq: _*)(renamesFrom.unexprSeq: _*)(renamesTo.unexprSeq: _*)
+      case '{ Quat.Product.WithRenamesCompact.apply($name, $tpe)(${ Varargs(fields) }*)(${ Varargs(values) }*)(${ Varargs(renamesFrom) }*)(${ Varargs(renamesTo) }*) } =>
+        Quat.Product.WithRenamesCompact(name.unexpr, tpe.unexpr)(fields.unexprSeq*)(values.unexprSeq*)(renamesFrom.unexprSeq*)(renamesTo.unexprSeq*)
     }
   }
 

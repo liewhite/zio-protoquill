@@ -229,7 +229,7 @@ object PlanterExpr {
         case '{ Nil } =>
           Some(List())
 
-        case '{ List.apply[t](${ Varargs(elems) }: _*) } =>
+        case '{ List.apply[t](${ Varargs(elems) }*) } =>
           val scalarValues =
             elems.map {
               case other @ PlanterExpr.Uprootable(vaseExpr) =>

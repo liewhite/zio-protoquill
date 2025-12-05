@@ -22,7 +22,7 @@ class Is[T: Type] {
 
 object Extractors {
   object InfixComponentsOrFail {
-    def unapply(using Quotes)(expr: Expr[_]) =
+    def unapply(using Quotes)(expr: Expr[?]) =
       expr match {
         case InfixComponents(parts, params) => Some((parts, params))
         case _                             => failParse(expr, "Invalid Infix Clause")
@@ -31,18 +31,18 @@ object Extractors {
 
   object InfixComponents {
     object InterpolatorClause {
-      def unapply(using Quotes)(expr: Expr[_]) = {
+      def unapply(using Quotes)(expr: Expr[?]) = {
         import quotes.reflect._
         expr match {
-          case '{ InfixInterpolator($partsExpr).infix(${ Varargs(params) }: _*) } => Some((partsExpr, params))
-          case '{ SqlInfixInterpolator($partsExpr).sql(${ Varargs(params) }: _*) } => Some((partsExpr, params))
-          case '{ QsqlInfixInterpolator($partsExpr).qsql(${ Varargs(params) }: _*) } => Some((partsExpr, params))
+          case '{ InfixInterpolator($partsExpr).infix(${ Varargs(params) }*) } => Some((partsExpr, params))
+          case '{ SqlInfixInterpolator($partsExpr).sql(${ Varargs(params) }*) } => Some((partsExpr, params))
+          case '{ QsqlInfixInterpolator($partsExpr).qsql(${ Varargs(params) }*) } => Some((partsExpr, params))
           case _ => None
         }
       }
     }
 
-    def unapply(using Quotes)(expr: Expr[_]): Option[(Seq[String], Seq[Expr[Any]])] = {
+    def unapply(using Quotes)(expr: Expr[?]): Option[(Seq[String], Seq[Expr[Any]])] = {
       import quotes.reflect.{Constant => TConstant, Ident => TIdent, Apply => TApply, _}
       expr match {
         // Discovered from cassandra context that nested infix clauses can have an odd form with the method infix$generic$i2 e.g:
@@ -78,10 +78,10 @@ object Extractors {
         case _ => failParse(expr, "All String-parts of a 'infix' statement must be static strings")
       }
 
-    def unapply(using Quotes)(expr: Expr[_]) = {
+    def unapply(using Quotes)(expr: Expr[?]) = {
       import quotes.reflect._
       expr match {
-        case '{ StringContext.apply(${ Varargs(parts) }: _*) } =>
+        case '{ StringContext.apply(${ Varargs(parts) }*) } =>
           Some(parts.map(staticOrFail(_)))
         case _ => None
       }
@@ -96,7 +96,7 @@ object Extractors {
     Expr(name)
   }
 
-  def printExpr(using Quotes)(expr: Expr[_], label: String = "") = {
+  def printExpr(using Quotes)(expr: Expr[?], label: String = "") = {
     import quotes.reflect._
     if (label != "")
       println(s"--------------------------------- ${label} ---------------------------------")
@@ -119,7 +119,7 @@ object Extractors {
   }
 
   object SelectApplyN {
-    def unapply(using Quotes)(term: Expr[_]): Option[(Expr[_], String, List[Expr[_]])] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[_], String, List[Expr[_]])] = {
       import quotes.reflect._
       SelectApplyN.Term.unapply(term.asTerm).map((sub, method, obj) => (sub.asExpr, method, obj.map(_.asExpr)))
     }
@@ -155,7 +155,7 @@ object Extractors {
   }
 
   object SelectApply1 {
-    def unapply(using Quotes)(term: Expr[_]): Option[(Expr[_], String, Expr[_])] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[_], String, Expr[_])] = {
       import quotes.reflect._
       term match {
         case Unseal(Applys(Select(body, method), List(arg))) => Some((body.asExpr, method, arg.asExpr))
@@ -167,7 +167,7 @@ object Extractors {
   // Designed to be a more generic version the Varargs which does not handle all cases.
   // Particularily when a varargs parameter is passed from one inline function into another.
   object GenericSeq {
-    def unapply(using Quotes)(term: Expr[_]): Option[List[Expr[_]]] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[List[Expr[_]]] = {
       import quotes.reflect._
       term match {
         case Varargs(props)                     => Some(props.toList)
@@ -187,12 +187,12 @@ object Extractors {
   // '{ ((blah: BlahType): BlahType) } ). If there are no type ascriptions, just return the term.
   // The unapply allows it to be done inside of a matcher.
   object UntypeExpr {
-    def unapply(using Quotes)(expr: Expr[_]): Option[Expr[_]] = {
+    def unapply(using Quotes)(expr: Expr[?]): Option[Expr[_]] = {
       import quotes.reflect._
       Untype.unapply(expr.asTerm).map(_.asExpr)
     }
 
-    def apply(using Quotes)(expr: Expr[_]): Expr[_] = {
+    def apply(using Quotes)(expr: Expr[?]): Expr[?] = {
       import quotes.reflect._
       import scala.util.{Try, Success, Failure}
       Untype.unapply(expr.asTerm).map(_.asExpr).get
@@ -254,7 +254,7 @@ object Extractors {
   }
 
   object SelectExpr {
-    def unapply(using Quotes)(term: Expr[_]): Option[(Expr[_], String)] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[_], String)] = {
       import quotes.reflect._
       term match {
         case Unseal(Select(Seal(prefix), memberName)) => Some((prefix, memberName))
@@ -264,7 +264,7 @@ object Extractors {
   }
 
   object `.` {
-    def unapply(using Quotes)(term: Expr[_]): Option[(Expr[_], String)] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[_], String)] = {
       import quotes.reflect._
       term match {
         case Unseal(Select(Seal(prefix), memberName)) => Some((prefix, memberName))
@@ -273,7 +273,7 @@ object Extractors {
     }
   }
 
-  extension (expr: Expr[_]) {
+  extension (expr: Expr[?]) {
     def `.(caseField)`(property: String)(using Quotes) = {
       import quotes.reflect._
       val tpe = expr.asTerm.tpe
@@ -297,7 +297,7 @@ object Extractors {
   }
 
   object SelectExprOpt {
-    def unapply(using Quotes)(term: Expr[_]): Option[(Expr[Option[_]], String)] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(Expr[Option[_]], String)] = {
       import quotes.reflect._
       term match {
         case Unseal(Select(prefix, memberName)) => Some((prefix.asExprOf[Option[Any]], memberName))
@@ -307,7 +307,7 @@ object Extractors {
   }
 
   object Lambda1 {
-    def unapply(using Quotes)(expr: Expr[_]): Option[(String, quotes.reflect.TypeRepr, quoted.Expr[_])] = {
+    def unapply(using Quotes)(expr: Expr[?]): Option[(String, quotes.reflect.TypeRepr, quoted.Expr[_])] = {
       import quotes.reflect._
       Lambda1.Term.unapply(expr.asTerm).map((str, tpe, expr) => (str, tpe, expr.asExpr))
     }
@@ -326,7 +326,7 @@ object Extractors {
   }
 
   object Lambda2 {
-    def unapply(using Quotes)(expr: Expr[_]): Option[(String, quotes.reflect.TypeRepr, String, quotes.reflect.TypeRepr, quoted.Expr[_])] = {
+    def unapply(using Quotes)(expr: Expr[?]): Option[(String, quotes.reflect.TypeRepr, String, quotes.reflect.TypeRepr, quoted.Expr[_])] = {
       import quotes.reflect._
       unapplyTerm(expr.asTerm).map((str1, tpe1, str2, tpe2, expr) => (str1, tpe1, str2, tpe2, expr.asExpr))
     }
@@ -359,7 +359,7 @@ object Extractors {
   }
 
   object LambdaN {
-    def unapply(using Quotes)(term: Expr[_]): Option[(List[(String, quotes.reflect.TypeRepr)], quoted.Expr[_])] = {
+    def unapply(using Quotes)(term: Expr[?]): Option[(List[(String, quotes.reflect.TypeRepr)], quoted.Expr[_])] = {
       import quotes.reflect._
       RawLambdaN.unapply(term.asTerm).map((strAndTpe, term) => (strAndTpe, term.asExpr))
     }
@@ -454,7 +454,7 @@ object Extractors {
   }
 
   /** Summon a named method from the context Context[D, N] */
-  def summonContextMethod(using Quotes)(name: String, ctx: Expr[_]) = {
+  def summonContextMethod(using Quotes)(name: String, ctx: Expr[?]) = {
     import quotes.reflect._
     val ctxTerm = ctx.asTerm
     val ctxClass = ctxTerm.tpe.widen.classSymbol.get
@@ -535,7 +535,7 @@ object Extractors {
   }
 
   object UncastSelectable {
-    def unapply(expr: Expr[_])(using Quotes): Option[Expr[_]] = {
+    def unapply(expr: Expr[?])(using Quotes): Option[Expr[?]] = {
       import quotes.reflect._
       UncastSelectable.Term.unapply(expr.asTerm).map(_.asExpr)
     }
@@ -567,7 +567,7 @@ object Extractors {
   } // end UncastSelectable
 
   object Uncast {
-    def unapply(expr: Expr[_])(using Quotes): Option[Expr[_]] = {
+    def unapply(expr: Expr[?])(using Quotes): Option[Expr[?]] = {
       import quotes.reflect._
       Uncast.Term.unapply(expr.asTerm).map(_.asExpr)
     }
@@ -662,7 +662,7 @@ object Extractors {
   }
 
   // TODO Change to 'is'
-  def isType[T: Type](using Quotes)(expr: Expr[_]) = {
+  def isType[T: Type](using Quotes)(expr: Expr[?]) = {
     import quotes.reflect._
     expr.asTerm.tpe <:< TypeRepr.of[T]
   }
@@ -719,7 +719,7 @@ object Extractors {
   }
 
   // TODO Change to 'are'
-  def is[T: Type](using Quotes)(inputs: Expr[_]*): Boolean = {
+  def is[T: Type](using Quotes)(inputs: Expr[?]*): Boolean = {
     import quotes.reflect._
     inputs.forall(input => input.asTerm.tpe <:< TypeRepr.of[T])
   }
@@ -817,7 +817,7 @@ object Extractors {
     }
   }
 
-  def nestInline(using Quotes)(call: Option[quotes.reflect.Tree], defs: List[quotes.reflect.Definition])(expr: Expr[_]): Expr[_] = {
+  def nestInline(using Quotes)(call: Option[quotes.reflect.Tree], defs: List[quotes.reflect.Definition])(expr: Expr[?]): Expr[?] = {
     import quotes.reflect._
     Inlined(call, defs, expr.asTerm).asExpr
   }
@@ -841,7 +841,7 @@ object Extractors {
    */
   object MatchingOptimizers {
     object --> {
-      def unapply(using Quotes)(expr: Expr[_]) = {
+      def unapply(using Quotes)(expr: Expr[?]) = {
         import quotes.reflect._
         // Doing UntypeExpr will make this match foo.bar as well as foo.bar[T] but it might be slower
         expr.asTerm match {
@@ -853,7 +853,7 @@ object Extractors {
     }
 
     object -@> {
-      def unapply(using Quotes)(expr: Expr[_]) = {
+      def unapply(using Quotes)(expr: Expr[?]) = {
         import quotes.reflect._
         expr.asTerm match {
           case SelectApplyN.Term(_, methodName, _) =>
@@ -864,7 +864,7 @@ object Extractors {
     }
 
     object -@@> {
-      def unapply(using Quotes)(expr: Expr[_]) = {
+      def unapply(using Quotes)(expr: Expr[?]) = {
         import quotes.reflect._
         expr.asTerm match {
           case Applys(SelectApplyN.Term(_, methodName, _), _) =>

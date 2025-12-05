@@ -10,7 +10,7 @@ object ListFlicer {
     import quotes.reflect._
     val indexValue = index match { case Expr(i: Int) => i }
     val exprs = UntypeExpr(list.asTerm.underlyingArgument.asExpr) match {
-      case '{ scala.List.apply[T](${ Varargs(args) }: _*) } => args
+      case '{ scala.List.apply[T](${ Varargs(args) }*) } => args
       case _                                                => report.throwError("Does not match: " + Printer.TreeStructure.show(list.asTerm))
     }
     exprs.apply(indexValue)
@@ -20,7 +20,7 @@ object ListFlicer {
   def tailImpl[T: Type](list: Expr[List[T]])(using Quotes): Expr[List[T]] = {
     import quotes.reflect._
     val exprs = UntypeExpr(list.asTerm.underlyingArgument.asExpr) match {
-      case '{ scala.List.apply[T](${ Varargs(args) }: _*) } => args
+      case '{ scala.List.apply[T](${ Varargs(args) }*) } => args
     }
     Expr.ofList(exprs.drop(1).toList)
   }
@@ -30,7 +30,7 @@ object ListFlicer {
     import quotes.reflect._
     val output =
       list match {
-        case '{ scala.List.apply[T](${ Varargs(args) }: _*) } if (args.length == 0) => true
+        case '{ scala.List.apply[T](${ Varargs(args) }*) } if (args.length == 0) => true
         case '{ scala.Nil }                                                         => true
         case _                                                                      => false
       }
@@ -49,7 +49,7 @@ object ListFlicer {
     import quotes.reflect._
     val output =
       list match {
-        case '{ scala.List.apply[T](${ Varargs(args) }: _*) } => args.length
+        case '{ scala.List.apply[T](${ Varargs(args) }*) } => args.length
         case '{ scala.Nil }                                   => 0
       }
     // '{ ${Literal(Constant(output)).asExprOf[Int]} }

@@ -107,6 +107,6 @@ inline implicit def autoQuote[T](inline body: T): Quoted[T] = ${ QuoteMacro[T]('
 // these functions on the quoted variant of the EntityQuery for the types to infer correctly.
 // see ActionSpec.scala action->insert->simple, using nested select, etc... tets for examples of this
 extension [T](inline quotedEntity: Quoted[EntityQuery[T]]) {
-  inline def insert(inline f: (T => (Any, Any)), inline f2: (T => (Any, Any))*): Insert[T] = unquote[EntityQuery[T]](quotedEntity).insert(f, f2: _*)
-  inline def update(inline f: (T => (Any, Any)), inline f2: (T => (Any, Any))*): Update[T] = unquote[EntityQuery[T]](quotedEntity).update(f, f2: _*)
+  inline def insert(inline f: (T => (Any, Any)), inline f2: (T => (Any, Any))*): Insert[T] = unquote[EntityQuery[T]](quotedEntity).insert(f, f2*)
+  inline def update(inline f: (T => (Any, Any)), inline f2: (T => (Any, Any))*): Update[T] = unquote[EntityQuery[T]](quotedEntity).update(f, f2*)
 }

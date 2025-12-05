@@ -532,7 +532,7 @@ object ParserHelpers {
       trace"Pat Match Parsing: ${body}".andLog()
       trace"Reductions: ${reductionTuples}".andLog()
       // Do not care about types here because pat-match body does not necessarily have correct typing in the Parsing phase
-      val result = BetaReduction(body, io.getquill.norm.TypeBehavior.ReplaceWithReduction, reductionTuples: _*)
+      val result = BetaReduction(body, io.getquill.norm.TypeBehavior.ReplaceWithReduction, reductionTuples*)
       trace"Result: ${result}".andLog()
       result
     }
