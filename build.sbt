@@ -197,7 +197,7 @@ lazy val basicSettings = Seq(
     "-no-indent",
     "-release:11",
   ),
-  javacOptions := Seq("-source", "11", "-target", "11"),
+  javacOptions := Seq("-source", "21", "-target", "21"),
 )
 
 // force redraft
